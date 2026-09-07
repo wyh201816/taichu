@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="626" viewBox="0 0 980 626" role="img" aria-labelledby="title desc">
+  <title id="title">太初进化地图</title>
+  <desc id="desc">接下来，我想让太初继续探索四个方向：人机对齐、创作展示与功能、架构优化、上线与产品化。完整想法可在 README 下方的四个问题中展开。这些是未来方向，不代表已实现能力。</desc>
+  <rect x="0.5" y="0.5" width="979" height="625" rx="4" fill="#19191d" stroke="#42424c"/>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-weight="400">
+    <g fill="#b0b0bb" font-size="14">
+      <text x="40" y="39" letter-spacing="2">太初 · 进化方向</text>
+      <text x="940" y="39" text-anchor="end">探索中</text>
+    </g>
+    <text x="40" y="94" fill="#ededf2" font-family="SimSun, Songti SC, Noto Serif CJK SC, serif" font-size="38">接下来，我想让太初……</text>
+    <text x="40" y="126" fill="#b0b0bb" font-size="16">四个方向，一些还想继续试下去的想法。</text>
+    <path d="M490 147V170M266 170H714" fill="none" stroke="#42424c"/>
+    <circle cx="490" cy="147" r="4" fill="#19191d" stroke="#b4bdd3"/>
+    <g fill="#19191d" stroke="#42424c">
+      <rect x="40" y="170" width="440" height="172"/>
+      <rect x="500" y="170" width="440" height="172"/>
+      <rect x="40" y="362" width="440" height="172"/>
+      <rect x="500" y="362" width="440" height="172"/>
+    </g>
+    <g fill="#b0b0bb" font-size="14">
+      <text x="64" y="201">01 / 人机对齐</text>
+      <text x="524" y="201">02 / 创作展示与功能</text>
+      <text x="64" y="393">03 / 架构优化</text>
+      <text x="524" y="393">04 / 上线与产品化</text>
+    </g>
+    <g fill="#ededf2" font-family="SimSun, Songti SC, Noto Serif CJK SC, serif" font-size="28">
+      <text x="64" y="246">我突然改了主意，<tspan x="64" dy="38">它怎么接住？</tspan></text>
+      <text x="524" y="246">我要复活一个人，<tspan x="524" dy="38">器灵却拒绝了？</tspan></text>
+      <text x="64" y="438">我没说要帮忙，<tspan x="64" dy="38">它怎么就知道了？</tspan></text>
+      <text x="524" y="438">别人愿意把整本书，<tspan x="524" dy="38">交给太初吗？</tspan></text>
+    </g>
+    <g fill="#b0b0bb" font-size="14">
+      <text x="64" y="319">授权边界 · 行动轨迹 · 实时干预</text>
+      <text x="524" y="319">3D 世界 · 虚拟读者 · 技能与器灵</text>
+      <text x="64" y="511">长期记忆 · 经验积累 · 成本与稳定性</text>
+      <text x="524" y="511">上手与信任 · 费用与交付 · 多人和发布</text>
+    </g>
+    <path d="M40 564H940" stroke="#42424c"/>
+    <g fill="#b0b0bb" font-size="14">
+      <text x="40" y="594">当前：单本小说 · 单作者工作台</text>
+      <text x="940" y="594" text-anchor="end">下方四个问题可展开阅读</text>
+    </g>
+  </g>
+</svg>
