@@ -376,7 +376,6 @@ start.bat
 </details>
 </details>
 
-本轮讨论的边界与术语记录见[进化方向与产品化讨论](./docs/已讨论功能/9-07进化方向与产品化.md)。
 <!-- taichu-evolution:end -->
 
 ## 许可证
