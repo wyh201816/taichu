@@ -1,0 +1,492 @@
+{
+  "schema": "taichu.general_agent_benchmark.fixture@2",
+  "fixture_id": "core_novel",
+  "manuscript_root": "manuscripts",
+  "knowledge_seed": "knowledge/confirmed_cards.json",
+  "conversation_seed": "conversation/seed.json",
+  "runtime_memory_seed": "runtime_memory/seed.json",
+  "external_source_manifest": "external_sources/manifest.json",
+  "manifest_entries": [
+    {
+      "path": "collaboration/cases_7_11.json",
+      "kind": "file",
+      "size_bytes": 2450,
+      "sha256": "ffb0f8a1c5416ad597e1cb45009ccbbe5ab740deaa65c42cb3d3734bec9e1c2c"
+    },
+    {
+      "path": "conversation/seed.json",
+      "kind": "file",
+      "size_bytes": 347,
+      "sha256": "4bf461d2e4b1900521da63a6bf78f347078b1b70814f68a33d88cf85f4488d1a"
+    },
+    {
+      "path": "external_sources/documents/lighthouse_archive.json",
+      "kind": "file",
+      "size_bytes": 408,
+      "sha256": "53acf579f5faba4e52862fed106ad4f04adb08aa7252f5e6ad1693a4796f6b73"
+    },
+    {
+      "path": "external_sources/manifest.json",
+      "kind": "file",
+      "size_bytes": 303,
+      "sha256": "184897218d642b98792459df9876a61430b05a2838ec9d9a2ba9864cc5286818"
+    },
+    {
+      "path": "knowledge/confirmed_cards.json",
+      "kind": "file",
+      "size_bytes": 2280,
+      "sha256": "6297ed4080f717b06360f5686303eed448ac58bb8104fcb67fa2fa95ff52c104"
+    },
+    {
+      "path": "manuscripts/chapters/chapter_001.md",
+      "kind": "file",
+      "size_bytes": 670,
+      "sha256": "286809efcafe03e89df8d905f2ad2953fc84f4ee55860f5f676b5dbff65f1bad"
+    },
+    {
+      "path": "manuscripts/chapters/chapter_002.md",
+      "kind": "file",
+      "size_bytes": 643,
+      "sha256": "cb857eb8b59fd32ee745d067116d4e48c2e32f5f6c365e6c35fc5b7db95e961f"
+    },
+    {
+      "path": "persistence/cases_12_17.json",
+      "kind": "file",
+      "size_bytes": 4167,
+      "sha256": "47b89c59790eb102415ebfa3fcab7ae6a6898b414ad5bf6d285f0bda63fa2689"
+    },
+    {
+      "path": "recovery/22_recovery_after_plan_before_execution/expected-state.json",
+      "kind": "file",
+      "size_bytes": 5154,
+      "sha256": "96dbb60a77f8eef77059bd0070cf8a20ff9364db848708333aade722364dbd9d"
+    },
+    {
+      "path": "recovery/22_recovery_after_plan_before_execution/fault-plan.json",
+      "kind": "file",
+      "size_bytes": 389,
+      "sha256": "03168098ab1493c98d22a59ffa2e4310b9e00e14e9df3f1fec570f439fceaae6"
+    },
+    {
+      "path": "recovery/23_recovery_tool_result_before_consumption/expected-state.json",
+      "kind": "file",
+      "size_bytes": 5192,
+      "sha256": "c70eedbc894e71628bdbfa10f204988554c0a0ff408488b12385a6a45b7866a0"
+    },
+    {
+      "path": "recovery/23_recovery_tool_result_before_consumption/fault-plan.json",
+      "kind": "file",
+      "size_bytes": 411,
+      "sha256": "eeb19eb3ab7e9460625939cb68b68f2a314785c8b3e53effe0b2db56719dcaa4"
+    },
+    {
+      "path": "recovery/24_recovery_subagent_interrupted/expected-state.json",
+      "kind": "file",
+      "size_bytes": 5293,
+      "sha256": "bef8fbb80b94426099a6ba60f59b0722c978a17440f19389c2389c3053644b72"
+    },
+    {
+      "path": "recovery/24_recovery_subagent_interrupted/fault-plan.json",
+      "kind": "file",
+      "size_bytes": 398,
+      "sha256": "c5f43af1ab4901c464e040cda7e08934e9451acf97390d2c1055b2a288dee9a4"
+    },
+    {
+      "path": "recovery/25_recovery_waiting_authorization/expected-state.json",
+      "kind": "file",
+      "size_bytes": 5286,
+      "sha256": "c025035c469ab30fcf6b3cfda648168dc167401e657ee7cd313b70cadef4c461"
+    },
+    {
+      "path": "recovery/25_recovery_waiting_authorization/fault-plan.json",
+      "kind": "file",
+      "size_bytes": 417,
+      "sha256": "423d7fa9dee235d7cfcaee75b962b27fec9c7822a530fb248acdc61331e5fbaa"
+    },
+    {
+      "path": "recovery/26_recovery_after_write_before_effect_success/expected-state.json",
+      "kind": "file",
+      "size_bytes": 5302,
+      "sha256": "dacef789e680dbf6ab44b8e14fe8c2897cecfdf32bad440bc5e124cc6895dcb0"
+    },
+    {
+      "path": "recovery/26_recovery_after_write_before_effect_success/fault-plan.json",
+      "kind": "file",
+      "size_bytes": 400,
+      "sha256": "cd8ed3507142053cc47a442634eeb711c474aae68d33aebb7a52f93c09578a89"
+    },
+    {
+      "path": "recovery/27_recovery_verification_interruption/expected-state.json",
+      "kind": "file",
+      "size_bytes": 5224,
+      "sha256": "a248c88926ee885c41aab0e86e0e6a0bb1fd7a0fd5326cd7bde511acfc5a46a5"
+    },
+    {
+      "path": "recovery/27_recovery_verification_interruption/fault-plan.json",
+      "kind": "file",
+      "size_bytes": 406,
+      "sha256": "c911fcd559f3028767dcace7ccf400587ffc87ce7816ff4c9724a7de57a63e40"
+    },
+    {
+      "path": "recovery/28_recovery_multiple_interruptions/expected-state.json",
+      "kind": "file",
+      "size_bytes": 5416,
+      "sha256": "99a3316f1bbb40d4414f0c56d43a18a68ca13eeb99201513b2ca7ff9db2b9e9d"
+    },
+    {
+      "path": "recovery/28_recovery_multiple_interruptions/fault-plan.json",
+      "kind": "file",
+      "size_bytes": 494,
+      "sha256": "8c66373e62c7c19bbed3794b79dd43d7747bb97cbeea7281b2ebdb6445fdede6"
+    },
+    {
+      "path": "recovery/29_recovery_checkpoint_integrity_or_version/expected-state.json",
+      "kind": "file",
+      "size_bytes": 5189,
+      "sha256": "b85c8bb156c430642f5e38878f99108b285a7cd9128432a8a44068d86248c146"
+    },
+    {
+      "path": "recovery/29_recovery_checkpoint_integrity_or_version/fault-plan.json",
+      "kind": "file",
+      "size_bytes": 417,
+      "sha256": "b4a1add3277d7e0827bc095d2b7184deb4fda86abba94f36e3865cf6aa5dbee6"
+    },
+    {
+      "path": "runtime_memory/seed.json",
+      "kind": "file",
+      "size_bytes": 4028,
+      "sha256": "8eb3f1f8fd33e26299ce7c489cc9e76eb3dcfc0a7f11c4af60ba7a90a327048a"
+    }
+  ],
+  "suite_manifest_entries": [
+    {
+      "path": "claim-catalog.json",
+      "kind": "file",
+      "size_bytes": 28573,
+      "sha256": "2955a597f3276f24d4af646498a2068961ad091811cad2e9677821a024eebffa"
+    }
+  ],
+  "scenario_assets": [
+    {
+      "asset_id": "decision_authorization_pending",
+      "kind": "human_decision",
+      "description": "授权请求保持待作者决定。",
+      "decision": "pending"
+    },
+    {
+      "asset_id": "decision_delete_confirmed",
+      "kind": "human_decision",
+      "description": "作者完成高风险删除二次确认。",
+      "decision": "confirmed"
+    },
+    {
+      "asset_id": "decision_write_approved",
+      "kind": "human_decision",
+      "description": "作者批准应用正文预览。",
+      "decision": "approved"
+    },
+    {
+      "asset_id": "decision_write_denied",
+      "kind": "human_decision",
+      "description": "作者拒绝应用正文预览。",
+      "decision": "denied"
+    },
+    {
+      "asset_id": "fault_after_plan",
+      "kind": "fault_plan",
+      "description": "fault_after_plan 的确定性故障注入计划。",
+      "injection_points": [
+        "plan_created"
+      ],
+      "max_interruptions": 1,
+      "recovery_expectation": "resume"
+    },
+    {
+      "asset_id": "fault_after_tool_result",
+      "kind": "fault_plan",
+      "description": "fault_after_tool_result 的确定性故障注入计划。",
+      "injection_points": [
+        "capability_result_committed"
+      ],
+      "max_interruptions": 1,
+      "recovery_expectation": "reuse_result"
+    },
+    {
+      "asset_id": "fault_after_write",
+      "kind": "fault_plan",
+      "description": "fault_after_write 的确定性故障注入计划。",
+      "injection_points": [
+        "resource_write_applied"
+      ],
+      "max_interruptions": 1,
+      "recovery_expectation": "reconcile_effect"
+    },
+    {
+      "asset_id": "fault_checkpoint_integrity",
+      "kind": "fault_plan",
+      "description": "fault_checkpoint_integrity 的确定性故障注入计划。",
+      "injection_points": [
+        "checkpoint_revision_validation"
+      ],
+      "max_interruptions": 1,
+      "recovery_expectation": "safe_failure"
+    },
+    {
+      "asset_id": "fault_during_subagent",
+      "kind": "fault_plan",
+      "description": "fault_during_subagent 的确定性故障注入计划。",
+      "injection_points": [
+        "subagent_started"
+      ],
+      "max_interruptions": 1,
+      "recovery_expectation": "resume"
+    },
+    {
+      "asset_id": "fault_during_verification",
+      "kind": "fault_plan",
+      "description": "fault_during_verification 的确定性故障注入计划。",
+      "injection_points": [
+        "verification_started"
+      ],
+      "max_interruptions": 1,
+      "recovery_expectation": "resume"
+    },
+    {
+      "asset_id": "fault_multiple_interruptions",
+      "kind": "fault_plan",
+      "description": "fault_multiple_interruptions 的确定性故障注入计划。",
+      "injection_points": [
+        "plan_created",
+        "resource_write_applied"
+      ],
+      "max_interruptions": 2,
+      "recovery_expectation": "reconcile_effect"
+    },
+    {
+      "asset_id": "fault_waiting_authorization",
+      "kind": "fault_plan",
+      "description": "fault_waiting_authorization 的确定性故障注入计划。",
+      "injection_points": [
+        "authorization_request_durable"
+      ],
+      "max_interruptions": 1,
+      "recovery_expectation": "resume"
+    },
+    {
+      "asset_id": "memory_seed_runtime_default",
+      "kind": "memory_seed",
+      "description": "运行工作记忆密封种子。",
+      "manifest_path": "runtime_memory/seed.json"
+    },
+    {
+      "asset_id": "post_state_context",
+      "kind": "expected_post_state",
+      "description": "post_state_context 的预期资源后态。",
+      "invariants": [
+        "受保护上下文保持",
+        "任务结果可复核"
+      ]
+    },
+    {
+      "asset_id": "post_state_preview_only",
+      "kind": "expected_post_state",
+      "description": "post_state_preview_only 的预期资源后态。",
+      "invariants": [
+        "正文不变",
+        "写 Effect 为零"
+      ]
+    },
+    {
+      "asset_id": "post_state_read_only",
+      "kind": "expected_post_state",
+      "description": "post_state_read_only 的预期资源后态。",
+      "invariants": [
+        "作者活动事实不变",
+        "案例副本保持隔离"
+      ]
+    },
+    {
+      "asset_id": "post_state_recovery",
+      "kind": "expected_post_state",
+      "description": "post_state_recovery 的预期资源后态。",
+      "invariants": [
+        "成功节点不重复",
+        "恢复证据完整"
+      ]
+    },
+    {
+      "asset_id": "post_state_safe_refusal",
+      "kind": "expected_post_state",
+      "description": "post_state_safe_refusal 的预期资源后态。",
+      "invariants": [
+        "能力调用为零",
+        "副作用为零",
+        "安全失败原因存在"
+      ]
+    },
+    {
+      "asset_id": "post_state_write_applied",
+      "kind": "expected_post_state",
+      "description": "post_state_write_applied 的预期资源后态。",
+      "invariants": [
+        "只改变目标资源",
+        "副作用精确一次"
+      ]
+    },
+    {
+      "asset_id": "post_state_write_denied",
+      "kind": "expected_post_state",
+      "description": "post_state_write_denied 的预期资源后态。",
+      "invariants": [
+        "正文不变",
+        "写 Effect 为零",
+        "拒绝证据存在"
+      ]
+    },
+    {
+      "asset_id": "pressure_equivalence",
+      "kind": "pressure_plan",
+      "description": "pressure_equivalence 的确定性上下文压力计划。",
+      "carrier": "equivalence_pair",
+      "target_units": 24000,
+      "protected_refs": [
+        "current_request",
+        "stable_rules"
+      ]
+    },
+    {
+      "asset_id": "pressure_invalid_memory",
+      "kind": "pressure_plan",
+      "description": "pressure_invalid_memory 的确定性上下文压力计划。",
+      "carrier": "invalid_memory",
+      "target_units": 24000,
+      "protected_refs": [
+        "current_request",
+        "stable_rules"
+      ]
+    },
+    {
+      "asset_id": "pressure_large_node_output",
+      "kind": "pressure_plan",
+      "description": "pressure_large_node_output 的确定性上下文压力计划。",
+      "carrier": "node_output",
+      "target_units": 32000,
+      "protected_refs": [
+        "current_request",
+        "stable_rules"
+      ]
+    },
+    {
+      "asset_id": "pressure_long_current_request",
+      "kind": "pressure_plan",
+      "description": "pressure_long_current_request 的确定性上下文压力计划。",
+      "carrier": "current_request",
+      "target_units": 12000,
+      "protected_refs": [
+        "current_request",
+        "stable_rules"
+      ]
+    },
+    {
+      "asset_id": "pressure_long_history",
+      "kind": "pressure_plan",
+      "description": "pressure_long_history 的确定性上下文压力计划。",
+      "carrier": "history",
+      "target_units": 24000,
+      "protected_refs": [
+        "current_request",
+        "stable_rules"
+      ]
+    },
+    {
+      "asset_id": "pressure_long_working_memory",
+      "kind": "pressure_plan",
+      "description": "pressure_long_working_memory 的确定性上下文压力计划。",
+      "carrier": "working_memory",
+      "target_units": 24000,
+      "protected_refs": [
+        "current_request",
+        "stable_rules"
+      ]
+    },
+    {
+      "asset_id": "pressure_multi_source",
+      "kind": "pressure_plan",
+      "description": "pressure_multi_source 的确定性上下文压力计划。",
+      "carrier": "multi_source",
+      "target_units": 48000,
+      "protected_refs": [
+        "current_request",
+        "stable_rules"
+      ]
+    },
+    {
+      "asset_id": "pressure_unsafe_compression",
+      "kind": "pressure_plan",
+      "description": "pressure_unsafe_compression 的确定性上下文压力计划。",
+      "carrier": "unsafe_total",
+      "target_units": 120000,
+      "protected_refs": [
+        "current_request",
+        "stable_rules"
+      ]
+    },
+    {
+      "asset_id": "resource_snapshot_collaboration_contracts",
+      "kind": "resource_snapshot",
+      "description": "案例七至十一协作行为的独立密封真值快照。",
+      "manifest_paths": [
+        "collaboration/cases_7_11.json"
+      ]
+    },
+    {
+      "asset_id": "resource_snapshot_confirmed_knowledge",
+      "kind": "resource_snapshot",
+      "description": "确认态知识卡与案例十六持久化合同的密封真值快照。",
+      "manifest_paths": [
+        "knowledge/confirmed_cards.json",
+        "persistence/cases_12_17.json"
+      ]
+    },
+    {
+      "asset_id": "resource_snapshot_core_novel",
+      "kind": "resource_snapshot",
+      "description": "核心小说密封资源快照。",
+      "manifest_paths": [
+        "conversation/seed.json",
+        "external_sources/documents/lighthouse_archive.json",
+        "external_sources/manifest.json",
+        "knowledge/confirmed_cards.json",
+        "manuscripts/chapters/chapter_001.md",
+        "manuscripts/chapters/chapter_002.md",
+        "runtime_memory/seed.json"
+      ]
+    },
+    {
+      "asset_id": "resource_snapshot_manuscript_chapter_001",
+      "kind": "resource_snapshot",
+      "description": "第一章正文写入前后状态的密封真值快照。",
+      "manifest_paths": [
+        "manuscripts/chapters/chapter_001.md"
+      ]
+    },
+    {
+      "asset_id": "resource_snapshot_novel_structure",
+      "kind": "resource_snapshot",
+      "description": "小说结构创建、更新与删除的密封真值快照。",
+      "manifest_paths": [
+        "persistence/cases_12_17.json"
+      ]
+    },
+    {
+      "asset_id": "resource_snapshot_persistence_contracts",
+      "kind": "resource_snapshot",
+      "description": "案例十二至十七持久化行为的独立密封真值快照。",
+      "manifest_paths": [
+        "persistence/cases_12_17.json"
+      ]
+    }
+  ],
+  "content_hash": "e7806a16e6a7431960f3d0cd597b4371dea1d2dbc3dc002094a6fad670a53182",
+  "snapshot_id": "fixture_e7806a16e6a7431960f3d0cd597b4371dea1d2dbc3dc002094a6fad670a53182"
+}

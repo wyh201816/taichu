@@ -1,0 +1,58 @@
+{
+  "schema": "taichu.general_agent_benchmark.collaboration_fixture@1",
+  "fixture_id": "cases_7_11",
+  "cases": {
+    "single_canon_evidence": {
+      "source_chapter_ids": [
+        "chapter_001",
+        "chapter_002"
+      ],
+      "facts": [
+        "第三道星纹被人为磨去是正文事实"
+      ],
+      "inferences": [
+        "师父参与磨去星纹只是苏砚的怀疑"
+      ],
+      "forbidden_fact_promotions": [
+        "师父磨去第三道星纹是正文事实"
+      ]
+    },
+    "summary_world_character": {
+      "shared_summary": "两章摘要围绕归潮灯复燃、钟鸣和记忆规则",
+      "world_branch": "雾港规则以潮汐和共同记忆交换为核心",
+      "character_branch": "苏砚选择先核对事实再承担点灯代价",
+      "branch_contract": "世界与人物分析必须共同消费同一摘要，且互不依赖"
+    },
+    "architecture_scene_draft": {
+      "architecture": "苏砚进入旧档案馆，遭守档人阻拦并发现缺页",
+      "stage_goals": [
+        "建立查档目标",
+        "形成守档阻力",
+        "揭示档案缺页"
+      ],
+      "scene_plan": "以查档目标、守档阻力和缺页发现构成三拍",
+      "candidate": "守档人横过木尺，挡住苏砚翻向缺页的手。潮湿纸缘只剩半枚星纹。",
+      "persistence_contract": "候选稿不得写回正文"
+    },
+    "parallel_review_triad": {
+      "candidate": "守档人挡住苏砚翻向缺页的手。",
+      "reviews": {
+        "consistency": "一致性审查未发现硬性设定冲突",
+        "narrative": "叙事审查确认目标与阻力清晰",
+        "style": "风格审查确认文风简洁且符合雾港氛围"
+      },
+      "execution_contract": "三个审查分支输入相同且互不依赖；本夹具不证明物理并发"
+    },
+    "revision_from_reviews": {
+      "original": "守档人挡住苏砚的手。\n\n窗外三声钟鸣仍与原稿一致。",
+      "review_artifact_refs": [
+        "artifact_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "artifact_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "artifact_cccccccccccccccccccccccccccccccc"
+      ],
+      "expected_revision": "守档人把木尺横在案卷上，挡住苏砚继续翻页。\n\n窗外三声钟鸣仍与原稿一致。",
+      "target_result": "修订稿用木尺横拦强化了守档阻力",
+      "protected_result": "非目标句窗外三声钟鸣仍与原稿一致"
+    }
+  }
+}

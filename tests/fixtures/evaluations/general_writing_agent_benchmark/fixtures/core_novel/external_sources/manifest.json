@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "source_id": "fixture_source_lighthouse_archive",
+      "query_keys": ["灯塔 记忆 民俗", "潮汐 回廊"],
+      "title": "北岸灯塔民俗摘录",
+      "display_name": "合成外部资料库",
+      "document_path": "documents/lighthouse_archive.json"
+    }
+  ]
+}

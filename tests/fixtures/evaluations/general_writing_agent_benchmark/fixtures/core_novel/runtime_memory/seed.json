@@ -1,0 +1,121 @@
+{
+  "schema": "taichu.general_agent_benchmark.memory_seed@1",
+  "memory_seed_ref": "memory_seed_runtime_default",
+  "entries": [
+    {
+      "memory_ref": "memory_superseded_old_style",
+      "kind": "user_instruction",
+      "content": "回答只写结论。",
+      "target_validity": "superseded",
+      "producer_ref": "node:fixture_memory:1:old_style",
+      "dependencies": [],
+      "supersedes_memory_ref": null,
+      "invalidation_reason": "已由当前有效的完整回答偏好替代。",
+      "sentinel_ref": "sentinel_superseded_old_style"
+    },
+    {
+      "memory_ref": "memory_active_style",
+      "kind": "user_instruction",
+      "content": "先给结论，再说明依据。",
+      "target_validity": "active",
+      "producer_ref": "node:fixture_memory:1:active_style",
+      "dependencies": [],
+      "supersedes_memory_ref": "memory_superseded_old_style",
+      "invalidation_reason": "",
+      "sentinel_ref": "sentinel_active_style"
+    },
+    {
+      "memory_ref": "memory_stale_scope",
+      "kind": "user_instruction",
+      "content": "只讨论第一章。",
+      "target_validity": "stale",
+      "producer_ref": "node:fixture_memory:1:stale_scope",
+      "dependencies": [],
+      "supersedes_memory_ref": null,
+      "invalidation_reason": "当前请求已改为跨章分析。",
+      "sentinel_ref": "sentinel_stale_scope"
+    },
+    {
+      "memory_ref": "memory_stale_dependent",
+      "kind": "task_summary",
+      "content": "后续分析范围仅限 chapter_001。",
+      "target_validity": "stale",
+      "producer_ref": "node:fixture_memory:1:stale_dependent",
+      "dependencies": [
+        {
+          "memory_ref": "memory_stale_scope",
+          "relation": "basis"
+        }
+      ],
+      "supersedes_memory_ref": null,
+      "invalidation_reason": "依赖的单章范围记忆已经失效。",
+      "sentinel_ref": "sentinel_stale_dependent"
+    },
+    {
+      "memory_ref": "memory_rejected_fact",
+      "kind": "user_instruction",
+      "content": "第三道星纹由沈漪磨去。",
+      "target_validity": "rejected",
+      "producer_ref": "node:fixture_memory:1:rejected_fact",
+      "dependencies": [],
+      "supersedes_memory_ref": null,
+      "invalidation_reason": "正文没有确认该事实。",
+      "sentinel_ref": "sentinel_rejected_fact"
+    }
+  ],
+  "answer_contracts": {
+    "memory_active_projection": {
+      "required_fragments": [
+        "结论：钟鸣连接了两章。",
+        "依据：第一章钟声后归潮灯照出暗门；第二章钟声后旧航迹显现。"
+      ],
+      "ordered_fragments": [
+        "结论：",
+        "依据："
+      ],
+      "forbidden_fragments": [
+        "回答只写结论"
+      ]
+    },
+    "memory_stale_dependency": {
+      "required_fragments": [
+        "chapter_001 的归潮灯线索",
+        "chapter_002 的旧航迹线索",
+        "钟鸣跨两章推进同一谜团"
+      ],
+      "ordered_fragments": [],
+      "forbidden_fragments": [
+        "只讨论第一章",
+        "仅限 chapter_001"
+      ]
+    },
+    "memory_rejected_parallel_isolation": {
+      "required_fragments": [
+        "正文仅确认第三道星纹存在磨损，来源未知。",
+        "目前无人能确认磨损者。"
+      ],
+      "ordered_fragments": [
+        "刻痕来源：",
+        "角色认知："
+      ],
+      "forbidden_fragments": [
+        "第三道星纹由沈漪磨去"
+      ]
+    },
+    "memory_superseded_repair": {
+      "required_fragments": [
+        "结论：钟鸣连接了两章。",
+        "依据：第一章钟声后归潮灯照出暗门；第二章钟声后旧航迹显现。"
+      ],
+      "ordered_fragments": [
+        "结论：",
+        "依据："
+      ],
+      "forbidden_fragments": [
+        "回答只写结论"
+      ]
+    }
+  },
+  "active_baseline_answer": "钟鸣连接了两章，第一章钟声后归潮灯照出暗门，第二章钟声后旧航迹显现。",
+  "content_hash": "08d371f33080e73b569b3ff55c025c48f3433659a7ce7441f8cb621ea051b3d6"
+}

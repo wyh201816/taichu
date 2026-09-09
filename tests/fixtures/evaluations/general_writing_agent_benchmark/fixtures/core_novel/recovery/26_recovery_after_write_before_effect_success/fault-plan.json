@@ -1,0 +1,16 @@
+{
+  "schema": "taichu.general_agent_benchmark.fault_plan@1",
+  "plan_id": "fault_after_write",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_26",
+    "run_id": "run_recovery_26"
+  },
+  "steps": [
+    {
+      "ordinal": 1,
+      "point": "resource_write_applied",
+      "once": true
+    }
+  ],
+  "content_hash": "3bfe85185e4eaabf18583d08e6ad449641ac1ff66feb9af112a810820a9471ff"
+}

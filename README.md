@@ -136,7 +136,7 @@
 <details>
 <summary><strong>它适合处理什么？</strong></summary>
 
-你可以把脑中的混乱思路交给太初，让它拆解问题、多方取证并整理矛盾；也可以批量检查设定、战力体系和跨章节冲突，或从近期正文中生成待确认的知识卡候选。
+你可以把脑中的混乱思路交给太初，让它拆解问题、多方取证并整理矛盾；也可以批量检查设定、战力体系和跨章节冲突，或从近期正文中用 Workflow 生成待确认的知识卡候选。（知名小说作家的战力系统崩坏，原因竟是因为没有使用太初）
 
 大模型生成内容可能有误。请确认后再写入知识库。
 
@@ -196,6 +196,8 @@ AI 候选经过结构、来源、冲突与生命周期校验，再由作者确�
 
 ![代码结构](./assets/code-structure.gif)
 
+项目级 Skills 位于 `.agents/skills/`，日常开发入口见[开发态索引](./.agents/索引.md)，客户端与多 Agent 协作配置位于 [.codex/config.toml](./.codex/config.toml)；[太初项目面试官](./.agents/skills/taichu-project-interviewer/SKILL.md)用于技术模拟面试、项目讲解陪练和简历技术深度评估。
+
 ## 工程证据
 
 太初把“能跑”与“可信”分开验证。以下数据来自当前仓库的固定评测集、恢复基准和真实产品评测页面；它们是可复验的工程证据，不是对所有模型、所有小说或文学质量的普遍承诺。
@@ -210,7 +212,7 @@ AI 候选经过结构、来源、冲突与生命周期校验，再由作者确�
 | 恢复压力矩阵 | 36 个组合 | Completion Rate 100%；Recovery Rate 100%；Duplicate Successful Side Effects 0 | 1/3/6/12/20/40 节点、并发 1/3/8、正常与中断两种模式 |
 | RAG 语义评测 | 30 个固定样例 | Context Relevance 0.8530；Faithfulness 0.9933；Answer Relevance 0.9526 | 检索与回答质量趋势、失败尾项定位 |
 
-恢复压力矩阵中，最大 Checkpoint 约为 7.63 MiB。当前默认运行边界保持为 12 个节点、并发 3、运行时限 900 秒，并坚持每次作者授权最多一个持久化写节点。
+恢复压力矩阵中，最大 Checkpoint 约为 7.63 MiB。当前默认运行边界为 24 个计划节点、并发 3、运行时限 3,600 秒，并坚持每次作者授权最多一个持久化写节点。
 
 ### Opik 评测与追踪
 
@@ -230,6 +232,11 @@ AI 候选经过结构、来源、冲突与生命周期校验，再由作者确�
 - [Opik：Agent Evaluation 官方文档](https://www.comet.com/docs/opik/evaluation/evaluate_agents)
 - [Opik：Dashboard 官方文档](https://www.comet.com/docs/opik/v1/production/dashboards)
 - [DeepEval：Evaluation 官方文档](https://deepeval.com/docs/evaluation-introduction)
+
+### 逐条学习与面试准备
+
+- [动态任务编排与十八条多步骤评测详解](./docs/学习资料/9-05动态任务编排与十八条多步骤评测详解.md)：逐案说明 9 类场景的请求、执行路径、能力约束与评分证据，并区分合成回归与真实模型效果。
+- [运行追踪与八条故障恢复评测详解](./docs/学习资料/9-05运行追踪与八条故障恢复评测详解.md)：逐案讲解故障注入位置、检查点续接、授权等待、写后对账和指标边界，附源码阅读顺序与面试问答。
 
 ## 技术栈与运行
 

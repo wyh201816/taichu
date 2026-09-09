@@ -1,0 +1,140 @@
+{
+  "schema": "taichu.general_agent_benchmark.recovery_expected_state@1",
+  "expectation_id": "recovery_23_expected",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_23",
+    "run_id": "run_recovery_23"
+  },
+  "fault_plan_hash": "6f0cd0751ce57d52fa9d11584bef0fe5713d3117a13549900ceda1055a13c220",
+  "expected_triggered_ordinals": [
+    1
+  ],
+  "pre_injection_state": "result_record_and_index_committed",
+  "recovery_entry": "recover_interrupted",
+  "reused_items": [
+    "capability_result",
+    "result_index"
+  ],
+  "retried_items": [],
+  "final_run_status": "completed",
+  "resumable": false,
+  "pending_human_kind": null,
+  "recovery_action": "reuse_checkpoint",
+  "reason_code": "reused_capability_result",
+  "side_effect_reconciliation": "no_effect",
+  "expected_counts": [
+    {
+      "name": "consumer_projection",
+      "count": 1
+    },
+    {
+      "name": "result_record",
+      "count": 1
+    },
+    {
+      "name": "tool_invocation",
+      "count": 1
+    }
+  ],
+  "checkpoint": {
+    "revision_chain": [
+      "revision_result"
+    ],
+    "selected_revision": "revision_result",
+    "integrity_outcome": "latest_valid",
+    "zero_restart": true
+  },
+  "resource_copies": [
+    {
+      "resource": "manuscript",
+      "copy_id": "copy_23_manuscript",
+      "source_ref": "manuscripts/chapters",
+      "before_sha256": "54fddbce40568f381b76a7eec8c32f5776df08cafefae57d119dc1e95dade869",
+      "expected_after_sha256": "54fddbce40568f381b76a7eec8c32f5776df08cafefae57d119dc1e95dade869",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "structure",
+      "copy_id": "copy_23_structure",
+      "source_ref": "sealed://structure/empty",
+      "before_sha256": "4067b90b294cafae110285c602ebff7dd4250b0c5c900bbd13dc85b96d9f2a2d",
+      "expected_after_sha256": "4067b90b294cafae110285c602ebff7dd4250b0c5c900bbd13dc85b96d9f2a2d",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "knowledge",
+      "copy_id": "copy_23_knowledge",
+      "source_ref": "knowledge/confirmed_cards.json",
+      "before_sha256": "ff8070745841cf572d1e604529d7b1d7eaebce3ad775e1f66f9cc7736648c118",
+      "expected_after_sha256": "ff8070745841cf572d1e604529d7b1d7eaebce3ad775e1f66f9cc7736648c118",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "conversation",
+      "copy_id": "copy_23_conversation",
+      "source_ref": "conversation/seed.json",
+      "before_sha256": "b46050b40f172db097d41db180c98fcad045dca154308edb84758cc89eebed16",
+      "expected_after_sha256": "b46050b40f172db097d41db180c98fcad045dca154308edb84758cc89eebed16",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "working_memory",
+      "copy_id": "copy_23_working_memory",
+      "source_ref": "runtime_memory/seed.json",
+      "before_sha256": "4027517ee03713326c6af7c3a02c38270b646d6d92ff6023d3268d027d14cbdc",
+      "expected_after_sha256": "de0b1b69b9199a8a7af349961de51935c934dbd11fb527692bd7047bcdb7eedc",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "run",
+      "copy_id": "copy_23_run",
+      "source_ref": "sealed://runtime/run/empty",
+      "before_sha256": "1b55676d55c60a1e445e1cd29c57fe9a9b08c289e075e83e3cecf4e3a456cbe5",
+      "expected_after_sha256": "cd4d6e9c006016147f1a5753db610e7a1382a62e9dc9e51bb6c7a7a0f6eb410e",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "result",
+      "copy_id": "copy_23_result",
+      "source_ref": "sealed://runtime/result/empty",
+      "before_sha256": "de8fa5aa75e42454dcbb18dae40e6a2d947fefea28384d15455d16be313e3a7a",
+      "expected_after_sha256": "889d68ce67144fc5cfb75848d31faafdd722a71df646c792120560a00082fe30",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "effect",
+      "copy_id": "copy_23_effect",
+      "source_ref": "sealed://runtime/effect/empty",
+      "before_sha256": "16eb8348cdf86828a0d98c8a1f520c6ef75dc02e5f94bfa03da607a178bc0985",
+      "expected_after_sha256": "16eb8348cdf86828a0d98c8a1f520c6ef75dc02e5f94bfa03da607a178bc0985",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "checkpoint",
+      "copy_id": "copy_23_checkpoint",
+      "source_ref": "sealed://runtime/checkpoint/empty",
+      "before_sha256": "7891c9dafbfdb8f1f879e20f15c55c03cfa4f4a3984074772524fcb651cc653f",
+      "expected_after_sha256": "86362c22692ea038827d3855dad59a66697c3b47d1c076061f9e75bd14549fba",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "context",
+      "copy_id": "copy_23_context",
+      "source_ref": "sealed://runtime/context/empty",
+      "before_sha256": "10cb801f638ccc352d6f0742feff0deac4a6da7d70a973779afbf2707097bbf0",
+      "expected_after_sha256": "9a6e14071d6f0fb6bd6aa01eeb36427a1e28811384d48cfcf99699a34dc650f3",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    }
+  ],
+  "content_hash": "cdc387fb87dd169ee3661c8398c45203c64ce22d96747230582609481d0d5070"
+}

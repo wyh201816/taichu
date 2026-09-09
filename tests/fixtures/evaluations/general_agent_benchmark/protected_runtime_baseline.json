@@ -1,0 +1,21 @@
+{
+  "recorded_on": "2026-09-01",
+  "purpose": "通用 Agent 新增受控工作记忆维护能力与默认关闭的 Opik Benchmark 观测配置，并经状态哈希、失效隔离、能力发现、Dataset 投影和评测回归复审后显式重新冻结：继续保护官方 checkpoint 单一恢复源、稳定 conversation thread、原生 Tool/structured streaming、全局 Tool 预算、供应商隔离与资源生命周期边界；未变化条目沿用原摘要",
+  "sha256": {
+    ".env.example": "8950609564a4edf939c4c4cd2b6987a93516059b42c4a5a1d161d02e383b8202",
+    "pyproject.toml": "933671be568fe7d7e2df07763ee49d3c0d2928d89296b15272c895e8491f2fd8",
+    "scripts/benchmark_general_agent_recovery.py": "fd73fbeb9ef13b3b7cf0270b148f3358ad92dae8059f0745823e38cccd7379f2",
+    "src/taichu/application/contracts/llm.py": "5551383a06d155e411d71b5a78760c96ad2cf5b41823445737ff665404ffdef2",
+    "src/taichu/application/general_agent/executor.py": "c7defc298d1455282fe990aac6249049e3ed03305dd5272c9af06e5301645fa1",
+    "src/taichu/application/general_agent/orchestrator.py": "6fe340b5b5e4a75702d537cc023ab9786a2fdfccb9e7f0f5d35ac76087d136af",
+    "src/taichu/application/invocations/models.py": "cd1e9041b32434ad199a78fa3e91071662b34b7b44f42da0a147de820aa2d033",
+    "src/taichu/application/subagents/runner.py": "6f0d8cc79c63189297fbf66c95c91922d77b7a56799e18f33b3e301cad60572c",
+    "src/taichu/config.py": "dcab2ed7aa0e8ecc4857f5e97b64923f3be7b827faa20d5b1237da6560ebc067",
+    "src/taichu/infrastructure/llm/adapter.py": "e8799ef36c9fb30e5a90f71f495501e25fa9022d26a423cc2824b4e8419acf11",
+    "src/taichu/infrastructure/llm/catalog.py": "503c627269ca1d38894f16ba5d7547b8dadb78c9a52f18c35612aa8463da53f2",
+    "src/taichu/infrastructure/llm/rightcode.py": "2889e8e4e5e54bf97cedc8d1eddfd42470d8a2057968980bd5694a1bd74696cc",
+    "start.bat": "1e4cf7819a4108e516ef86a8d2e42c85517043333583f3996516d31522c49a01",
+    "web/next.config.ts": "623e97f72e817c73037c2e9e879bb90777987d25285fb2992bfe6977e1be15a0",
+    "web/package.json": "45be5da72b34bb0406532dcd43f0459f97c99344dd2a0343e061c83ef5f46c00"
+  }
+}

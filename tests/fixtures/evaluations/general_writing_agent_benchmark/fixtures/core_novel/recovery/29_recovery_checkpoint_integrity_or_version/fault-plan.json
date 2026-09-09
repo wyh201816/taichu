@@ -1,0 +1,16 @@
+{
+  "schema": "taichu.general_agent_benchmark.fault_plan@1",
+  "plan_id": "fault_checkpoint_integrity",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_29",
+    "run_id": "run_recovery_29"
+  },
+  "steps": [
+    {
+      "ordinal": 1,
+      "point": "checkpoint_revision_validation",
+      "once": true
+    }
+  ],
+  "content_hash": "7e667ade688a86a4b025a9de7f3624873b8c9169ee04a975950df74910aa53a6"
+}

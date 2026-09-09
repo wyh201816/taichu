@@ -1,0 +1,62 @@
+%% 更新日期：2026-07-11
+%% 状态：架构学习资料，MongoDB 事实源已落地，仍包含未来可选能力
+flowchart TB
+    subgraph UI[产品体验层 · Next.js / React]
+        Editor[沉浸式写作区<br/>卷章树 · Markdown · 9 个 AI 入口]
+        Inbox[创作收件箱<br/>灵感 · 待确认设定 · 问题]
+        Knowledge[知识与历史<br/>知识卡 · Prompt 回放 · SourceRef]
+        Workbench[智能体工作台<br/>单章/批量抽取 · 候选审核]
+        Monitor[任务监控与设置<br/>节点拓扑 · NDJSON 事件 · 模型配置]
+    end
+
+    subgraph API[API 与组合根 · FastAPI]
+        ChapterAPI[chapters · outline]
+        WritingAPI[writing-ai · ai-cards]
+        KnowledgeAPI[inbox · knowledge]
+        AgentAPI[agent-workbench · agent-tasks]
+        ExportAPI[export]
+        Composition[main.py<br/>依赖注入 · CapabilityContext · Registry]
+    end
+
+    subgraph APP[应用层]
+        WritingLoop[编辑器写作闭环<br/>上下文构建 → 事实检索 → Prompt 路由 → LLM → 结构化输出]
+        CardLoop[结果卡闭环<br/>AIResultCard → 插入正文 / 灵感 / PendingFact]
+        Extraction[知识沉淀 Agent<br/>预处理 → 抽取 → 专家 → 校验 → 冲突 → 审核项]
+        AuthorGate[作者审核闸门<br/>新建 / 更新 / 编辑确认 / 拒绝]
+        PluginRuntime[插件运行时<br/>发现与注册分离 · Protocol · 能力校验]
+    end
+
+    subgraph INFRA[基础设施层]
+        LLM[RightCodeLLMGateway<br/>多模型协议适配]
+        Storage[ProjectAssetStorageBackend<br/>JsonStorageBackend]
+        Events[AgentTaskEventCenter<br/>JsonAgentRunStore]
+        KnowledgeRepo[KnowledgeService<br/>MongoKnowledgeRepository]
+    end
+
+    subgraph DATA[数据宪法]
+        Markdown[Markdown 正文<br/>唯一文本事实源]
+        Workspace[Workspace JSONL<br/>AI / Inbox 非事实中间态]
+        Derived[Derived JSON<br/>AgentRun / 评测 / LLM 轨迹]
+        Mongo[(MongoDB knowledge_cards<br/>唯一结构事实源)]
+        Generated[Generated<br/>运行日志 · 导出临时物 · 可重建缓存]
+    end
+
+    UI --> API
+    API --> APP
+    WritingLoop --> CardLoop
+    CardLoop --> AuthorGate
+    Extraction --> AuthorGate
+    WritingLoop --> KnowledgeRepo
+    AuthorGate --> KnowledgeRepo
+    APP --> INFRA
+    Storage --> Markdown
+    Storage --> Workspace
+    Events --> Derived
+    KnowledgeRepo --> Mongo
+    Markdown --> WritingLoop
+    Mongo --> WritingLoop
+
+    classDef current fill:#effaf4,stroke:#21875a,color:#10213d;
+    classDef intermediate fill:#fff7ec,stroke:#c56a13,color:#10213d;
+    class Markdown,Mongo,KnowledgeRepo current;
+    class Workspace,Derived,Generated intermediate;

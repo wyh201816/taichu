@@ -1,0 +1,139 @@
+{
+  "schema": "taichu.general_agent_benchmark.recovery_expected_state@1",
+  "expectation_id": "recovery_22_expected",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_22",
+    "run_id": "run_recovery_22"
+  },
+  "fault_plan_hash": "beff2694eb97bc40cb27ea269f89b02e59f59ec9f2de978784f1ceba3dcd48e2",
+  "expected_triggered_ordinals": [
+    1
+  ],
+  "pre_injection_state": "plan_durable_before_first_node",
+  "recovery_entry": "recover_interrupted",
+  "reused_items": [
+    "plan_revision"
+  ],
+  "retried_items": [],
+  "final_run_status": "completed",
+  "resumable": false,
+  "pending_human_kind": null,
+  "recovery_action": "reuse_checkpoint",
+  "reason_code": "recovered_after_plan",
+  "side_effect_reconciliation": "no_effect",
+  "expected_counts": [
+    {
+      "name": "effect_success",
+      "count": 0
+    },
+    {
+      "name": "first_node_attempt",
+      "count": 1
+    },
+    {
+      "name": "planner_call",
+      "count": 1
+    }
+  ],
+  "checkpoint": {
+    "revision_chain": [
+      "revision_plan"
+    ],
+    "selected_revision": "revision_plan",
+    "integrity_outcome": "latest_valid",
+    "zero_restart": true
+  },
+  "resource_copies": [
+    {
+      "resource": "manuscript",
+      "copy_id": "copy_22_manuscript",
+      "source_ref": "manuscripts/chapters",
+      "before_sha256": "54fddbce40568f381b76a7eec8c32f5776df08cafefae57d119dc1e95dade869",
+      "expected_after_sha256": "54fddbce40568f381b76a7eec8c32f5776df08cafefae57d119dc1e95dade869",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "structure",
+      "copy_id": "copy_22_structure",
+      "source_ref": "sealed://structure/empty",
+      "before_sha256": "4067b90b294cafae110285c602ebff7dd4250b0c5c900bbd13dc85b96d9f2a2d",
+      "expected_after_sha256": "4067b90b294cafae110285c602ebff7dd4250b0c5c900bbd13dc85b96d9f2a2d",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "knowledge",
+      "copy_id": "copy_22_knowledge",
+      "source_ref": "knowledge/confirmed_cards.json",
+      "before_sha256": "ff8070745841cf572d1e604529d7b1d7eaebce3ad775e1f66f9cc7736648c118",
+      "expected_after_sha256": "ff8070745841cf572d1e604529d7b1d7eaebce3ad775e1f66f9cc7736648c118",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "conversation",
+      "copy_id": "copy_22_conversation",
+      "source_ref": "conversation/seed.json",
+      "before_sha256": "b46050b40f172db097d41db180c98fcad045dca154308edb84758cc89eebed16",
+      "expected_after_sha256": "b46050b40f172db097d41db180c98fcad045dca154308edb84758cc89eebed16",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "working_memory",
+      "copy_id": "copy_22_working_memory",
+      "source_ref": "runtime_memory/seed.json",
+      "before_sha256": "4027517ee03713326c6af7c3a02c38270b646d6d92ff6023d3268d027d14cbdc",
+      "expected_after_sha256": "fbb4bbae01ec35f95d43455d0269de33b691c82fcbbf27ca0d7934fe19f176e6",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "run",
+      "copy_id": "copy_22_run",
+      "source_ref": "sealed://runtime/run/empty",
+      "before_sha256": "1b55676d55c60a1e445e1cd29c57fe9a9b08c289e075e83e3cecf4e3a456cbe5",
+      "expected_after_sha256": "ed531d383c081e0cffd923d00469587197b176738309fcd37d6c2a84208459a5",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "result",
+      "copy_id": "copy_22_result",
+      "source_ref": "sealed://runtime/result/empty",
+      "before_sha256": "de8fa5aa75e42454dcbb18dae40e6a2d947fefea28384d15455d16be313e3a7a",
+      "expected_after_sha256": "bbf0e2638ec50691ba36d9377b75b7c2610387c9b95e1156c7c46d844e12c53f",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "effect",
+      "copy_id": "copy_22_effect",
+      "source_ref": "sealed://runtime/effect/empty",
+      "before_sha256": "16eb8348cdf86828a0d98c8a1f520c6ef75dc02e5f94bfa03da607a178bc0985",
+      "expected_after_sha256": "16eb8348cdf86828a0d98c8a1f520c6ef75dc02e5f94bfa03da607a178bc0985",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "checkpoint",
+      "copy_id": "copy_22_checkpoint",
+      "source_ref": "sealed://runtime/checkpoint/empty",
+      "before_sha256": "7891c9dafbfdb8f1f879e20f15c55c03cfa4f4a3984074772524fcb651cc653f",
+      "expected_after_sha256": "e25f44108a4d910c9b7c5725b0e36f9f6cf209f622ad2c6e3b5141f5635cdcf8",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "context",
+      "copy_id": "copy_22_context",
+      "source_ref": "sealed://runtime/context/empty",
+      "before_sha256": "10cb801f638ccc352d6f0742feff0deac4a6da7d70a973779afbf2707097bbf0",
+      "expected_after_sha256": "2ff571011382090b9a5e94f54300c5a1a1505605b21f6095cc52844c84ccc139",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    }
+  ],
+  "content_hash": "2e9a9f84b4d0972012a53bbda02a6f72497c96978108176224ec1f0f25cfe80f"
+}

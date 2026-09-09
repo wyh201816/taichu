@@ -1,0 +1,16 @@
+{
+  "schema": "taichu.general_agent_benchmark.fault_plan@1",
+  "plan_id": "fault_during_subagent",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_24",
+    "run_id": "run_recovery_24"
+  },
+  "steps": [
+    {
+      "ordinal": 1,
+      "point": "subagent_started",
+      "once": true
+    }
+  ],
+  "content_hash": "c7f9d89e55f2b1a05657a5ef31c85c410e0bf3fa0eedb3c674ee3110b2f6c85a"
+}

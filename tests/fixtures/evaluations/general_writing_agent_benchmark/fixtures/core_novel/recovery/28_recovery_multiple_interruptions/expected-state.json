@@ -1,0 +1,153 @@
+{
+  "schema": "taichu.general_agent_benchmark.recovery_expected_state@1",
+  "expectation_id": "recovery_28_expected",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_28",
+    "run_id": "run_recovery_28"
+  },
+  "fault_plan_hash": "e009fd45ad789fdbf13cbaa3adee3cd915f6bc8dec165dd09ea3689fac1f8d4a",
+  "expected_triggered_ordinals": [
+    1,
+    2
+  ],
+  "pre_injection_state": "second_declared_fault_reached",
+  "recovery_entry": "recover_interrupted",
+  "reused_items": [
+    "completed_results",
+    "effect_records",
+    "plan_revision"
+  ],
+  "retried_items": [
+    "effect_reconciliation"
+  ],
+  "final_run_status": "completed",
+  "resumable": false,
+  "pending_human_kind": null,
+  "recovery_action": "reuse_checkpoint",
+  "reason_code": "ordered_faults_recovered",
+  "side_effect_reconciliation": "reconciled_success",
+  "expected_counts": [
+    {
+      "name": "effect_success",
+      "count": 1
+    },
+    {
+      "name": "planner_call",
+      "count": 1
+    },
+    {
+      "name": "recovery_decision",
+      "count": 2
+    },
+    {
+      "name": "resource_write",
+      "count": 1
+    },
+    {
+      "name": "result_record",
+      "count": 2
+    }
+  ],
+  "checkpoint": {
+    "revision_chain": [
+      "revision_plan",
+      "revision_effect_started"
+    ],
+    "selected_revision": "revision_effect_started",
+    "integrity_outcome": "latest_valid",
+    "zero_restart": true
+  },
+  "resource_copies": [
+    {
+      "resource": "manuscript",
+      "copy_id": "copy_28_manuscript",
+      "source_ref": "manuscripts/chapters",
+      "before_sha256": "54fddbce40568f381b76a7eec8c32f5776df08cafefae57d119dc1e95dade869",
+      "expected_after_sha256": "cc93c1fc0c6af9ead3857810b037437786f5510f86e4c9b5f9eff8c706ce95b2",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "structure",
+      "copy_id": "copy_28_structure",
+      "source_ref": "sealed://structure/empty",
+      "before_sha256": "4067b90b294cafae110285c602ebff7dd4250b0c5c900bbd13dc85b96d9f2a2d",
+      "expected_after_sha256": "4067b90b294cafae110285c602ebff7dd4250b0c5c900bbd13dc85b96d9f2a2d",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "knowledge",
+      "copy_id": "copy_28_knowledge",
+      "source_ref": "knowledge/confirmed_cards.json",
+      "before_sha256": "ff8070745841cf572d1e604529d7b1d7eaebce3ad775e1f66f9cc7736648c118",
+      "expected_after_sha256": "ff8070745841cf572d1e604529d7b1d7eaebce3ad775e1f66f9cc7736648c118",
+      "author_active_fact": true,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "conversation",
+      "copy_id": "copy_28_conversation",
+      "source_ref": "conversation/seed.json",
+      "before_sha256": "b46050b40f172db097d41db180c98fcad045dca154308edb84758cc89eebed16",
+      "expected_after_sha256": "b46050b40f172db097d41db180c98fcad045dca154308edb84758cc89eebed16",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "working_memory",
+      "copy_id": "copy_28_working_memory",
+      "source_ref": "runtime_memory/seed.json",
+      "before_sha256": "4027517ee03713326c6af7c3a02c38270b646d6d92ff6023d3268d027d14cbdc",
+      "expected_after_sha256": "6a9de819653476a53974180ab572d7f8d9a4f5f2d4d27cb4fb9a534812331a78",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "run",
+      "copy_id": "copy_28_run",
+      "source_ref": "sealed://runtime/run/empty",
+      "before_sha256": "1b55676d55c60a1e445e1cd29c57fe9a9b08c289e075e83e3cecf4e3a456cbe5",
+      "expected_after_sha256": "799195adca4c92e214da08ff80606f264db55ef4fb3db2d6e348dacb56a1a084",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "result",
+      "copy_id": "copy_28_result",
+      "source_ref": "sealed://runtime/result/empty",
+      "before_sha256": "de8fa5aa75e42454dcbb18dae40e6a2d947fefea28384d15455d16be313e3a7a",
+      "expected_after_sha256": "e3b7644ddb7216e0f15076ca88de7a26795daaee6d411accc562deebe60fdb20",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "effect",
+      "copy_id": "copy_28_effect",
+      "source_ref": "sealed://runtime/effect/empty",
+      "before_sha256": "16eb8348cdf86828a0d98c8a1f520c6ef75dc02e5f94bfa03da607a178bc0985",
+      "expected_after_sha256": "d7d2296d463c59ac1ea96b5f1c43e44122de2d1a484d686fc7fab8ceb6ff1a42",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "checkpoint",
+      "copy_id": "copy_28_checkpoint",
+      "source_ref": "sealed://runtime/checkpoint/empty",
+      "before_sha256": "7891c9dafbfdb8f1f879e20f15c55c03cfa4f4a3984074772524fcb651cc653f",
+      "expected_after_sha256": "b94ebbfd8e07e8c78d92c3e36514ee1885d96434f52e5ee4b9b86df8fd5207c2",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    },
+    {
+      "resource": "context",
+      "copy_id": "copy_28_context",
+      "source_ref": "sealed://runtime/context/empty",
+      "before_sha256": "10cb801f638ccc352d6f0742feff0deac4a6da7d70a973779afbf2707097bbf0",
+      "expected_after_sha256": "079b7a6cb9ac7813c39ede6ef95839b84ab2ffccfbb893bb16f856f7cb5f47a6",
+      "author_active_fact": false,
+      "workspace_sentinel": true
+    }
+  ],
+  "content_hash": "64571670518f28c264bb613a080c78f0ca8d32767c4424c5b30d7ee09a89c49e"
+}

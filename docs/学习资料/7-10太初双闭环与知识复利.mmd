@@ -1,0 +1,69 @@
+%% 更新日期：2026-07-11
+%% 状态：架构学习资料，MongoDB 事实源已落地，仍包含未来可选能力
+flowchart TB
+    subgraph L1[L1 · 编辑器写作循环]
+        Write[作者写作] --> Route[保存与 9 个入口路由]
+        Route --> Context[构建选区/本章/全文上下文]
+        Context --> Retrieve[读取正文与 confirmed 知识]
+        Retrieve --> Prompt[固定 Prompt + 模型调用 + 结构化解析]
+        Prompt --> Card[WritingAIRun / AIResultCard]
+        Card --> Action{作者处理}
+        Action -->|正文候选| Insert[插入正文]
+        Action -->|建议| Idea[保存为灵感]
+        Action -->|事实候选| Pending[PendingFact]
+    end
+
+    subgraph L2[L2 · 正文知识沉淀循环]
+        Load[读取与切分] --> General[通用抽取]
+        General --> Normalize[提及清洗与实体聚合]
+        Normalize --> Gate[候选质量闸门]
+        Gate --> Dispatch[类型分发]
+        Dispatch --> Character[角色专家]
+        Dispatch --> Entity[实体专家]
+        Dispatch --> EventRule[事件规则专家]
+        Character --> Merge[合并候选]
+        Entity --> Merge
+        EventRule --> Merge
+        Merge --> Validate[Schema 与来源校验]
+        Validate --> Conflict[本轮冲突检查]
+        Conflict --> Match[匹配已有知识]
+        Match --> Review[审核项 + JSON 中间态]
+    end
+
+    subgraph GOVERNANCE[作者确认与数据晋升]
+        Markdown[Markdown 正文<br/>唯一文本事实源]
+        Candidate[AI / Agent / Inbox JSON 候选<br/>lifecycle=draft]
+        Checks[Schema · 来源 · 冲突 · 生命周期]
+        Author[作者确认 / 编辑确认 / 拒绝]
+        Mongo[(MongoDB knowledge_cards<br/>唯一结构事实源)]
+        Projection[可重建派生层<br/>Milvus 向量 · BM25 · 图 · 缓存]
+        Future[下一次写作<br/>更准的证据与一致性上下文]
+        Markdown --> Candidate --> Checks --> Author
+        Author -->|确认后写入| Mongo
+        Markdown --> Projection
+        Mongo --> Future --> Markdown
+        Mongo -.按需构建.-> Projection
+        Projection -.辅助检索.-> Future
+    end
+
+    subgraph NONFACT[非事实旁路 · 默认不得进入 fact_scope]
+        N1[AIResultCard]
+        N2[IdeaCard]
+        N3[ChapterSummary]
+        N4[ChapterIssue]
+        N5[PendingFact]
+        N6[评测 JSON]
+    end
+
+    Pending --> Candidate
+    Review --> Checks
+    Idea --> N2
+    Card --> N1
+    Insert --> Markdown
+
+    classDef fact fill:#effaf4,stroke:#21875a,color:#10213d;
+    classDef target fill:#f5f1ff,stroke:#7455c5,color:#10213d,stroke-dasharray:6 4;
+    classDef nonfact fill:#eef5ff,stroke:#2f70d0,color:#10213d;
+    class Markdown,Mongo,Future fact;
+    class Projection target;
+    class N1,N2,N3,N4,N5,N6 nonfact;

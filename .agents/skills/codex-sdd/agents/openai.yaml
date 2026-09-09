@@ -1,7 +1,0 @@
-interface:
-  display_name: "Codex 规格驱动开发"
-  short_description: "自动编排太初项目的需求、设计、任务、实现与独立校验流程"
-  default_prompt: "使用 $codex-sdd 为当前需求自动完成规格初始化、需求分析和技术设计。"
-
-policy:
-  allow_implicit_invocation: true

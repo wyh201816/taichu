@@ -1,0 +1,110 @@
+{
+  "schema": "taichu.general_agent_benchmark.persistence_fixture@1",
+  "cases": {
+    "manuscript_preview_only": {
+      "resource_snapshot_ref": "resource_snapshot_manuscript_chapter_001",
+      "target_ref": "manuscript:chapter_001",
+      "before": {
+        "content_sha256": "286809efcafe03e89df8d905f2ad2953fc84f4ee55860f5f676b5dbff65f1bad"
+      },
+      "preview_candidate": {
+        "expected_content_sha256": "4678cfbac64d7cf0cad00893d12374496cd974ac6f0256573a110582deca19e4",
+        "appended_text": "远处又补来第四声钟鸣。"
+      },
+      "expected_after": {
+        "content_sha256": "286809efcafe03e89df8d905f2ad2953fc84f4ee55860f5f676b5dbff65f1bad"
+      },
+      "expected_change": "unchanged",
+      "expected_write_effect_count": 0
+    },
+    "manuscript_patch_authorized_resume": {
+      "resource_snapshot_ref": "resource_snapshot_manuscript_chapter_001",
+      "target_ref": "manuscript:chapter_001",
+      "before": {
+        "content_sha256": "286809efcafe03e89df8d905f2ad2953fc84f4ee55860f5f676b5dbff65f1bad"
+      },
+      "confirmed_preview": {
+        "expected_content_sha256": "6e639102a05eec96ba700d759bca83e01f1df69d98085071b7fc8cc95e1e9ba9",
+        "appended_text": "第四声钟鸣贴着海雾传来。"
+      },
+      "expected_after": {
+        "content_sha256": "6e639102a05eec96ba700d759bca83e01f1df69d98085071b7fc8cc95e1e9ba9"
+      },
+      "expected_change": "updated",
+      "expected_write_effect_count": 1,
+      "required_plan_identity": "authorized_patch_plan"
+    },
+    "structure_create_update": {
+      "resource_snapshot_ref": "resource_snapshot_novel_structure",
+      "target_ref": "runtime_returned_structure_item_id",
+      "create_result_contract": {
+        "identity_path": "changes[0].item_id",
+        "revision_path": "structure_version"
+      },
+      "update_input_contract": {
+        "identity_path": "operations[0].target_id",
+        "revision_path": "expected_structure_version"
+      },
+      "expected_after": {
+        "target_title": "旧档案馆查档场景",
+        "protected_structure_refs_unchanged": true
+      },
+      "expected_change": "target_only",
+      "expected_write_effect_count": 2
+    },
+    "structure_delete_second_confirmation": {
+      "resource_snapshot_ref": "resource_snapshot_novel_structure",
+      "target_ref": "fixture_delete_volume",
+      "before_confirmation": {
+        "target_archived": false,
+        "write_effect_count": 0
+      },
+      "after_cancellation": {
+        "target_archived": false,
+        "write_effect_count": 0
+      },
+      "after_confirmation": {
+        "target_archived": true,
+        "protected_structure_refs_unchanged": true,
+        "write_effect_count": 1
+      },
+      "expected_change": "deleted"
+    },
+    "knowledge_create_update": {
+      "resource_snapshot_ref": "resource_snapshot_confirmed_knowledge",
+      "target_ref": "runtime_returned_knowledge_card_id",
+      "create_result_contract": {
+        "identity_path": "card.id",
+        "revision_path": "card.updated_at"
+      },
+      "update_input_contract": {
+        "identity_path": "card_id",
+        "revision_path": "expected_updated_at"
+      },
+      "expected_after": {
+        "name": "旧档案馆",
+        "summary": "雾港保存守灯记录与港务旧档的场所。",
+        "lifecycle": "confirmed"
+      },
+      "expected_change": "created",
+      "expected_write_effect_count": 2
+    },
+    "write_authorization_denied": {
+      "resource_snapshot_ref": "resource_snapshot_manuscript_chapter_001",
+      "target_ref": "manuscript:chapter_001",
+      "before": {
+        "content_sha256": "286809efcafe03e89df8d905f2ad2953fc84f4ee55860f5f676b5dbff65f1bad"
+      },
+      "denied_preview": {
+        "expected_content_sha256": "8f2a4b4fdbaf2577e4f0b3ac220ca225a93ed0532fc8723e347e7967a5552839",
+        "appended_text": "这段文字不得落盘。"
+      },
+      "expected_after": {
+        "content_sha256": "286809efcafe03e89df8d905f2ad2953fc84f4ee55860f5f676b5dbff65f1bad"
+      },
+      "expected_change": "unchanged",
+      "expected_write_effect_count": 0,
+      "required_terminal_reason": "write_rejected"
+    }
+  }
+}

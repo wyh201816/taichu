@@ -1,0 +1,16 @@
+{
+  "schema": "taichu.general_agent_benchmark.fault_plan@1",
+  "plan_id": "fault_waiting_authorization",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_25",
+    "run_id": "run_recovery_25"
+  },
+  "steps": [
+    {
+      "ordinal": 1,
+      "point": "authorization_request_durable",
+      "once": true
+    }
+  ],
+  "content_hash": "b3c3cecd4f133a5b94dc4c7f31045b55ae6c1a872c502c393ebc70517afac9fc"
+}

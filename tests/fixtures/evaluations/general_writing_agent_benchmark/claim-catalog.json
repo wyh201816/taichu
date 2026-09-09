@@ -1,0 +1,1068 @@
+{
+  "schema": "taichu.general_agent_benchmark.claim_catalog@1",
+  "catalog_version": 1,
+  "fixture_id": "core_novel",
+  "claims": [
+    {
+      "claim_id": "capability_none",
+      "subject": "runtime",
+      "predicate": "invokes",
+      "object": "capability",
+      "polarity": "negative",
+      "canonical_forms": [
+        "不调用工具或子智能体"
+      ],
+      "aliases": [
+        {
+          "alias": "零能力调用",
+          "canonical": "不调用工具或子智能体"
+        }
+      ],
+      "source_fixture_refs": [
+        "post_state_read_only"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "collaboration_character_branch",
+      "subject": "character_branch",
+      "predicate": "concludes",
+      "object": "su_yan_checks_facts_before_cost",
+      "polarity": "positive",
+      "canonical_forms": [
+        "苏砚选择先核对事实再承担点灯代价"
+      ],
+      "aliases": [
+        {
+          "alias": "人物分支先核实再承担代价",
+          "canonical": "苏砚选择先核对事实再承担点灯代价"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "collaboration_summary_shared",
+      "subject": "shared_summary",
+      "predicate": "covers",
+      "object": "lamp_bells_and_memory_rules",
+      "polarity": "positive",
+      "canonical_forms": [
+        "两章摘要围绕归潮灯复燃、钟鸣和记忆规则"
+      ],
+      "aliases": [
+        {
+          "alias": "共同摘要覆盖归潮灯钟鸣和记忆规则",
+          "canonical": "两章摘要围绕归潮灯复燃、钟鸣和记忆规则"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "collaboration_world_branch",
+      "subject": "world_branch",
+      "predicate": "concludes",
+      "object": "tide_and_shared_memory_exchange",
+      "polarity": "positive",
+      "canonical_forms": [
+        "雾港规则以潮汐和共同记忆交换为核心"
+      ],
+      "aliases": [
+        {
+          "alias": "世界分支确认潮汐记忆交换规则",
+          "canonical": "雾港规则以潮汐和共同记忆交换为核心"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "conflict_opposing_goals_first",
+      "subject": "conflict_scene",
+      "predicate": "clarifies_first",
+      "object": "mutually_exclusive_goals",
+      "polarity": "positive",
+      "canonical_forms": [
+        "先明确冲突双方无法同时实现的目标；因为目标互斥才能形成持续阻力。"
+      ],
+      "aliases": [
+        {
+          "alias": "冲突场景先明确双方互斥目标",
+          "canonical": "先明确冲突双方无法同时实现的目标；因为目标互斥才能形成持续阻力。"
+        }
+      ],
+      "source_fixture_refs": [
+        "post_state_read_only"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "context_current_request_preserved",
+      "subject": "current_request",
+      "predicate": "preserves",
+      "object": "original_content",
+      "polarity": "positive",
+      "canonical_forms": [
+        "当前请求逐字保持"
+      ],
+      "aliases": [
+        {
+          "alias": "原始请求完整保留",
+          "canonical": "当前请求逐字保持"
+        }
+      ],
+      "source_fixture_refs": [
+        "post_state_context"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "context_unsafe_refusal",
+      "subject": "runtime",
+      "predicate": "refuses",
+      "object": "unsafe_context_assembly",
+      "polarity": "positive",
+      "canonical_forms": [
+        "无法安全组装上下文时拒绝执行"
+      ],
+      "aliases": [
+        {
+          "alias": "上下文不安全时停止",
+          "canonical": "无法安全组装上下文时拒绝执行"
+        }
+      ],
+      "source_fixture_refs": [
+        "post_state_safe_refusal"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "external_fixture_not_real_world",
+      "subject": "external_source",
+      "predicate": "has_scope",
+      "object": "synthetic_fixture_only",
+      "polarity": "positive",
+      "canonical_forms": [
+        "这份资料只是合成评测夹具而非现实世界资料"
+      ],
+      "aliases": [
+        {
+          "alias": "外部来源仅为合成夹具",
+          "canonical": "这份资料只是合成评测夹具而非现实世界资料"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "external_lighthouse_memory_temporarily_stored",
+      "subject": "synthetic_lighthouse_lore",
+      "predicate": "stores",
+      "object": "memory_in_tidal_enclosure",
+      "polarity": "positive",
+      "canonical_forms": [
+        "合成外部资料称灯塔记忆会暂存在与潮汐相连的封闭空间"
+      ],
+      "aliases": [
+        {
+          "alias": "合成灯塔资料称记忆暂存在潮汐空间",
+          "canonical": "合成外部资料称灯塔记忆会暂存在与潮汐相连的封闭空间"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "knowledge_created_update_identity",
+      "subject": "knowledge_card",
+      "predicate": "updated_with",
+      "object": "returned_identity_and_revision",
+      "polarity": "positive",
+      "canonical_forms": [
+        "旧档案馆地点卡使用创建返回的身份和修订值完成更新"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_persistence_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "knowledge_final_confirmed",
+      "subject": "knowledge_card",
+      "predicate": "has_lifecycle",
+      "object": "confirmed",
+      "polarity": "positive",
+      "canonical_forms": [
+        "最终地点卡保持确认态"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_confirmed_knowledge"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "knowledge_tide_lamp_confirmed",
+      "subject": "tide_lamp_rule",
+      "predicate": "has_lifecycle",
+      "object": "confirmed",
+      "polarity": "positive",
+      "canonical_forms": [
+        "归潮灯记忆规则处于确认态"
+      ],
+      "aliases": [
+        {
+          "alias": "潮灯规则已经确认",
+          "canonical": "归潮灯记忆规则处于确认态"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "knowledge_tide_lamp_item_confirmed",
+      "subject": "tide_lamp_item",
+      "predicate": "has_lifecycle",
+      "object": "confirmed",
+      "polarity": "positive",
+      "canonical_forms": [
+        "归潮灯物品卡处于确认态"
+      ],
+      "aliases": [
+        {
+          "alias": "归潮灯物品卡已经确认",
+          "canonical": "归潮灯物品卡处于确认态"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_authorized_preview_applied",
+      "subject": "manuscript_patch",
+      "predicate": "applies",
+      "object": "confirmed_preview",
+      "polarity": "positive",
+      "canonical_forms": [
+        "作者批准后应用了同一份补丁预览"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_persistence_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_authorized_sentence_persisted",
+      "subject": "manuscript_chapter_001",
+      "predicate": "contains",
+      "object": "authorized_fourth_bell_sentence",
+      "polarity": "positive",
+      "canonical_forms": [
+        "第一章最终正文包含第四声钟鸣贴着海雾传来"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_manuscript_chapter_001"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_master_erased_star_fact",
+      "subject": "master_involvement",
+      "predicate": "has_status",
+      "object": "established_fact",
+      "polarity": "positive",
+      "canonical_forms": [
+        "师父磨去第三道星纹是正文事实"
+      ],
+      "aliases": [
+        {
+          "alias": "正文确认师父磨去星纹",
+          "canonical": "师父磨去第三道星纹是正文事实"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_preview_generated",
+      "subject": "manuscript_patch",
+      "predicate": "has_state",
+      "object": "preview_generated",
+      "polarity": "positive",
+      "canonical_forms": [
+        "正文补丁预览已生成"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_persistence_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_preview_preserved_source",
+      "subject": "manuscript_chapter_001",
+      "predicate": "remains",
+      "object": "unchanged_after_preview",
+      "polarity": "positive",
+      "canonical_forms": [
+        "预览后第一章正文完全不变"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_manuscript_chapter_001"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_star_mark_deliberately_erased",
+      "subject": "third_star_mark",
+      "predicate": "was",
+      "object": "deliberately_erased",
+      "polarity": "positive",
+      "canonical_forms": [
+        "第三道星纹被人为磨去是正文事实"
+      ],
+      "aliases": [
+        {
+          "alias": "正文确认第三道星纹被人为磨去",
+          "canonical": "第三道星纹被人为磨去是正文事实"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_suspicion_not_fact",
+      "subject": "master_involvement",
+      "predicate": "has_status",
+      "object": "suspicion",
+      "polarity": "positive",
+      "canonical_forms": [
+        "师父参与磨去星纹只是苏砚的怀疑"
+      ],
+      "aliases": [
+        {
+          "alias": "师父涉事尚非事实",
+          "canonical": "师父参与磨去星纹只是苏砚的怀疑"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_three_bells_across_chapters",
+      "subject": "chapter_001_and_chapter_002",
+      "predicate": "both_contain",
+      "object": "three_bell_chimes",
+      "polarity": "positive",
+      "canonical_forms": [
+        "第一章和第二章都出现三声钟鸣"
+      ],
+      "aliases": [
+        {
+          "alias": "两章都出现三声钟鸣",
+          "canonical": "第一章和第二章都出现三声钟鸣"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "manuscript_tide_lamp_reveals_hidden_door",
+      "subject": "tide_lamp_glimmer",
+      "predicate": "reveals",
+      "object": "hidden_door_behind_wall",
+      "polarity": "positive",
+      "canonical_forms": [
+        "归潮灯亮起微光后照出墙后暗门"
+      ],
+      "aliases": [
+        {
+          "alias": "归潮灯微光照出墙后暗门",
+          "canonical": "归潮灯亮起微光后照出墙后暗门"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "memory_bell_connects_chapters",
+      "subject": "bell_clue",
+      "predicate": "connects",
+      "object": "chapter_001_and_chapter_002",
+      "polarity": "positive",
+      "canonical_forms": [
+        "钟鸣连接了两章"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "memory_seed_runtime_default"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "memory_chapter_one_lamp_clue",
+      "subject": "chapter_001",
+      "predicate": "contains_clue",
+      "object": "bell_then_tide_lamp_reveals_door",
+      "polarity": "positive",
+      "canonical_forms": [
+        "第一章钟声后归潮灯照出暗门"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "memory_seed_runtime_default"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "memory_chapter_two_route_clue",
+      "subject": "chapter_002",
+      "predicate": "contains_clue",
+      "object": "bell_then_old_route_appears",
+      "polarity": "positive",
+      "canonical_forms": [
+        "第二章钟声后旧航迹显现"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "memory_seed_runtime_default"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "memory_cross_chapter_clues",
+      "subject": "chapter_001_and_chapter_002",
+      "predicate": "jointly_indicate",
+      "object": "bell_advances_same_mystery",
+      "polarity": "positive",
+      "canonical_forms": [
+        "chapter_001 的归潮灯线索与 chapter_002 的旧航迹线索共同表明钟鸣跨两章推进同一谜团"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "memory_seed_runtime_default"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "memory_mark_source_unknown",
+      "subject": "third_star_mark",
+      "predicate": "has_source",
+      "object": "unknown",
+      "polarity": "positive",
+      "canonical_forms": [
+        "正文仅确认第三道星纹存在磨损，来源未知"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "memory_seed_runtime_default"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "memory_no_confirmed_wearer",
+      "subject": "characters",
+      "predicate": "can_confirm",
+      "object": "no_wearer",
+      "polarity": "positive",
+      "canonical_forms": [
+        "目前无人能确认磨损者"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "memory_seed_runtime_default"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "memory_wrong_shen_yi_mark",
+      "subject": "shen_yi",
+      "predicate": "wore_away",
+      "object": "third_star_mark",
+      "polarity": "positive",
+      "canonical_forms": [
+        "第三道星纹由沈漪磨去"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "memory_seed_runtime_default"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "pipeline_candidate_contains_resistance",
+      "subject": "draft_candidate",
+      "predicate": "contains",
+      "object": "archivist_blocks_missing_page_access",
+      "polarity": "positive",
+      "canonical_forms": [
+        "候选场景写出守档人阻拦苏砚查阅缺页"
+      ],
+      "aliases": [
+        {
+          "alias": "候选稿落实查档阻力",
+          "canonical": "候选场景写出守档人阻拦苏砚查阅缺页"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "pipeline_candidate_not_persisted",
+      "subject": "draft_candidate",
+      "predicate": "does_not_modify",
+      "object": "manuscript",
+      "polarity": "positive",
+      "canonical_forms": [
+        "候选稿没有写回正文"
+      ],
+      "aliases": [
+        {
+          "alias": "候选稿未持久化到正文",
+          "canonical": "候选稿没有写回正文"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "protected_content_preserved",
+      "subject": "protected_content",
+      "predicate": "remains",
+      "object": "unchanged",
+      "polarity": "positive",
+      "canonical_forms": [
+        "受保护的非目标内容保持不变"
+      ],
+      "aliases": [
+        {
+          "alias": "非目标内容未被改写",
+          "canonical": "受保护的非目标内容保持不变"
+        }
+      ],
+      "source_fixture_refs": [
+        "post_state_read_only"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "review_consistency_clear",
+      "subject": "consistency_review",
+      "predicate": "finds",
+      "object": "no_hard_canon_conflict",
+      "polarity": "positive",
+      "canonical_forms": [
+        "一致性审查未发现硬性设定冲突"
+      ],
+      "aliases": [
+        {
+          "alias": "一致性分支未发现硬冲突",
+          "canonical": "一致性审查未发现硬性设定冲突"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "review_narrative_clear",
+      "subject": "narrative_review",
+      "predicate": "confirms",
+      "object": "goal_and_resistance_clear",
+      "polarity": "positive",
+      "canonical_forms": [
+        "叙事审查确认目标与阻力清晰"
+      ],
+      "aliases": [
+        {
+          "alias": "叙事分支确认目标阻力清晰",
+          "canonical": "叙事审查确认目标与阻力清晰"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "review_style_clear",
+      "subject": "style_review",
+      "predicate": "confirms",
+      "object": "concise_mist_harbor_style",
+      "polarity": "positive",
+      "canonical_forms": [
+        "风格审查确认文风简洁且符合雾港氛围"
+      ],
+      "aliases": [
+        {
+          "alias": "风格分支确认简洁且符合雾港氛围",
+          "canonical": "风格审查确认文风简洁且符合雾港氛围"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "revision_bells_sentence_preserved",
+      "subject": "revision_candidate",
+      "predicate": "preserves",
+      "object": "three_bells_sentence",
+      "polarity": "positive",
+      "canonical_forms": [
+        "非目标句窗外三声钟鸣仍与原稿一致"
+      ],
+      "aliases": [
+        {
+          "alias": "修订保留三声钟鸣非目标句",
+          "canonical": "非目标句窗外三声钟鸣仍与原稿一致"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "revision_target_fixed",
+      "subject": "revision",
+      "predicate": "fixes",
+      "object": "target_issue",
+      "polarity": "positive",
+      "canonical_forms": [
+        "修订稿修复了目标问题"
+      ],
+      "aliases": [
+        {
+          "alias": "目标问题已经修复",
+          "canonical": "修订稿修复了目标问题"
+        }
+      ],
+      "source_fixture_refs": [
+        "post_state_read_only"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "revision_wooden_ruler_resistance",
+      "subject": "revision_candidate",
+      "predicate": "strengthens",
+      "object": "archivist_resistance",
+      "polarity": "positive",
+      "canonical_forms": [
+        "修订稿用木尺横拦强化了守档阻力"
+      ],
+      "aliases": [
+        {
+          "alias": "修订通过木尺横拦强化阻力",
+          "canonical": "修订稿用木尺横拦强化了守档阻力"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_collaboration_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "route_direct",
+      "subject": "runtime_route",
+      "predicate": "uses",
+      "object": "direct_answer",
+      "polarity": "positive",
+      "canonical_forms": [
+        "本轮直接回答"
+      ],
+      "aliases": [
+        {
+          "alias": "直接作答",
+          "canonical": "本轮直接回答"
+        }
+      ],
+      "source_fixture_refs": [
+        "post_state_read_only"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "structure_created_update_identity",
+      "subject": "novel_structure_item",
+      "predicate": "updated_with",
+      "object": "returned_identity_and_version",
+      "polarity": "positive",
+      "canonical_forms": [
+        "旧档案馆结构项使用创建返回的身份和版本完成重命名"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_persistence_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "structure_non_target_preserved",
+      "subject": "novel_structure",
+      "predicate": "preserves",
+      "object": "non_target_items",
+      "polarity": "positive",
+      "canonical_forms": [
+        "其他结构项保持不变"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_novel_structure"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "structure_target_deleted_after_confirmation",
+      "subject": "novel_structure_item",
+      "predicate": "archived_after",
+      "object": "second_confirmation",
+      "polarity": "positive",
+      "canonical_forms": [
+        "二次确认后只归档目标结构项"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_persistence_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "tide_lamp_memory_returnable",
+      "subject": "stored_memory",
+      "predicate": "can_return_after",
+      "object": "third_star_restored",
+      "polarity": "positive",
+      "canonical_forms": [
+        "第三道星纹复原后记忆可以归还"
+      ],
+      "aliases": [
+        {
+          "alias": "修复第三道星纹即可归还记忆",
+          "canonical": "第三道星纹复原后记忆可以归还"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "tide_lamp_memory_temporarily_stored",
+      "subject": "tide_lamp",
+      "predicate": "stores",
+      "object": "shared_memory",
+      "polarity": "positive",
+      "canonical_forms": [
+        "归潮灯会把共同记忆暂存在潮汐回廊"
+      ],
+      "aliases": [
+        {
+          "alias": "潮灯会暂存共同记忆",
+          "canonical": "归潮灯会把共同记忆暂存在潮汐回廊"
+        }
+      ],
+      "source_fixture_refs": [
+        "resource_snapshot_core_novel"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "write_denial_preserved_source",
+      "subject": "manuscript_chapter_001",
+      "predicate": "remains",
+      "object": "unchanged_after_denial",
+      "polarity": "positive",
+      "canonical_forms": [
+        "本次没有修改正文"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_manuscript_chapter_001"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    },
+    {
+      "claim_id": "write_denial_recorded",
+      "subject": "write_authorization",
+      "predicate": "has_decision",
+      "object": "denied",
+      "polarity": "positive",
+      "canonical_forms": [
+        "已按你的决定拒绝写入"
+      ],
+      "aliases": [],
+      "source_fixture_refs": [
+        "resource_snapshot_persistence_contracts"
+      ],
+      "allowed_normalizers": [
+        {
+          "normalizer_id": "claim_text",
+          "version": "1"
+        }
+      ]
+    }
+  ],
+  "content_hash": "ff033fd6f03bbf5d5fe9e93bb54d111eacb78e302682a4bbf5b9abee42e3094d"
+}

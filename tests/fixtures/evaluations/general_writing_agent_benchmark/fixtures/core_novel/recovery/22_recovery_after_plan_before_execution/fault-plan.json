@@ -1,0 +1,16 @@
+{
+  "schema": "taichu.general_agent_benchmark.fault_plan@1",
+  "plan_id": "fault_after_plan",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_22",
+    "run_id": "run_recovery_22"
+  },
+  "steps": [
+    {
+      "ordinal": 1,
+      "point": "plan_created",
+      "once": true
+    }
+  ],
+  "content_hash": "beff2694eb97bc40cb27ea269f89b02e59f59ec9f2de978784f1ceba3dcd48e2"
+}

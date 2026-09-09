@@ -1,0 +1,13 @@
+{
+  "conversation_id": "fixture_conversation_core",
+  "messages": [
+    {
+      "role": "user",
+      "content": "写作建议请先给结论，再说明依据；不确定的线索不要写成既定事实。"
+    },
+    {
+      "role": "assistant",
+      "content": "明白。我会区分正文事实、角色推测和写作建议。"
+    }
+  ]
+}

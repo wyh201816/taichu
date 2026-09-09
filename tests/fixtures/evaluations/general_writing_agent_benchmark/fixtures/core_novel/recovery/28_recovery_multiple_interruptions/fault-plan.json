@@ -1,0 +1,21 @@
+{
+  "schema": "taichu.general_agent_benchmark.fault_plan@1",
+  "plan_id": "fault_multiple_interruptions",
+  "run_identity": {
+    "conversation_id": "conversation_recovery_28",
+    "run_id": "run_recovery_28"
+  },
+  "steps": [
+    {
+      "ordinal": 1,
+      "point": "plan_created",
+      "once": true
+    },
+    {
+      "ordinal": 2,
+      "point": "resource_write_applied",
+      "once": true
+    }
+  ],
+  "content_hash": "e009fd45ad789fdbf13cbaa3adee3cd915f6bc8dec165dd09ea3689fac1f8d4a"
+}
