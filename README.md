@@ -190,19 +190,6 @@ Agent 按需生成计划，调度工具与子 Agent，在执行中校验结果�
 
 ![上下文压缩：材料累积、五级处理与任务延续](./assets/context-compression.gif)
 
-<details>
-<summary>压缩策略与实现依据</summary>
-
-主 Agent 使用五级上下文流水线：工具和子 Agent 的完整结果先落盘，模型默认读取最多 4,000 token 的确定性预览；会话空闲满 60 分钟后，继续执行时按白名单清理陈旧读取结果。工作记忆由 DeepSeek V4 Flash 在节点批次和用户轮结束时抽取对象差量，包含任务目标、文件引用、工作流状态、错误经验和用户约束。代码单独维护真实执行状态与来源有效性。
-
-完整请求达到模型窗口 80%，或自上次折叠以来完成超过 20 轮对话时，由主模型独立摘要分支折叠旧对话，保留最近五条历史原文，容量触发时目标降至 70% 以下。达到 90% 或点击“压缩上下文”时，直接对当前活动上下文执行全量结构化压缩，分别更新历史摘要与工作记忆。稳定规则、长期记忆和当前请求按原有职责重新组装，不设置各层配额。全量压缩失败或必要输入仍超限时明确暂停。
-
-清理记录、抽取游标、摘要覆盖范围和压缩边界保存在原会话的官方 LangGraph 检查点中；原始消息和完整结果不会因压缩而删除。模型窗口、计数方式、触发原因和前后 token 数见上下文快照详情。摘要分支复用主调用前缀，但不保证供应商缓存命中；工作记忆和摘要均不是已确认小说事实。
-
-实现入口：`src/taichu/application/general_agent/pipeline.py`；边界与恢复测试：`tests/unit/application/general_agent/test_context_pipeline.py`、`test_pipeline_runtime.py`。通用 Agent 脚本评测入口为 `tests/fixtures/evaluations/general_writing_agent_benchmark/suite.json`；脚本压力评测检查确定性投影与回读，LLM 抽取和摘要质量需要真实模型验收。
-
-</details>
-
 ### 数据治理
 
 Markdown 保存正文原文，MongoDB 保存已确认知识，检索索引从这两类事实源派生。  
