@@ -664,8 +664,8 @@ function workingMemoryContent(
     .filter(item => item !== null));
   runtimeState.push(...memory.unresolved_issues);
   if (memory.replan_guidance) runtimeState.push(memory.replan_guidance);
-  const digest = compactContextValue(memory.digest);
-  if (digest !== null) runtimeState.push(digest);
+  const sessionMemory = compactContextValue(memory.session_memory);
+  if (sessionMemory !== null) runtimeState.push(sessionMemory);
   if (runtimeState.length) content["当前运行状态"] = runtimeState;
   return content;
 }

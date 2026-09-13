@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
+import json
 import uvicorn
 from typing import Any, cast
 from fastapi import FastAPI, HTTPException, Request
@@ -22,7 +23,6 @@ from taichu.application.capabilities import CapabilityContext
 from taichu.application.general_agent.events import GeneralAgentEventCenter
 from taichu.application.general_agent.context import (
     ContextAssembler,
-    GeneralAgentContextPolicy,
 )
 from taichu.application.general_agent.executor import DynamicDagExecutor
 from taichu.application.general_agent.memory_policy import AgentMemoryPolicy
@@ -382,8 +382,6 @@ def create_app(
             project_storage=project_storage,
         ),
         policy=AgentMemoryPolicy(
-            top_k=app_settings.general_agent_working_memory_retrieval_top_k,
-            char_budget=app_settings.general_agent_working_memory_char_budget,
             age_decay_days=app_settings.general_agent_memory_age_decay_days,
             minimum_relevance=(app_settings.general_agent_memory_minimum_relevance),
         ),
@@ -395,37 +393,6 @@ def create_app(
             / "source"
             / "workspace"
             / "long_term_memory.md"
-        ),
-        policy=GeneralAgentContextPolicy(
-            total_char_budget=app_settings.general_agent_context_char_budget,
-            working_memory_retrieval_top_k=(
-                app_settings.general_agent_working_memory_retrieval_top_k
-            ),
-            working_memory_char_budget=(
-                app_settings.general_agent_working_memory_char_budget
-            ),
-            long_term_memory_retrieval_top_k=(
-                app_settings.general_agent_long_term_memory_retrieval_top_k
-            ),
-            long_term_memory_char_budget=(
-                app_settings.general_agent_long_term_memory_char_budget
-            ),
-            history_memory_limit=(app_settings.general_agent_history_memory_limit),
-            history_memory_char_budget=(
-                app_settings.general_agent_history_memory_char_budget
-            ),
-            node_summary_char_budget=(
-                app_settings.general_agent_node_summary_char_budget
-            ),
-            plan_summary_char_budget=(
-                app_settings.general_agent_plan_summary_char_budget
-            ),
-            message_compaction_threshold=(
-                app_settings.general_agent_message_compaction_threshold
-            ),
-            node_output_compaction_threshold=(
-                app_settings.general_agent_node_output_compaction_threshold
-            ),
         ),
     )
     general_agent_event_center = GeneralAgentEventCenter()
@@ -508,6 +475,30 @@ def create_app(
     general_agent_chat_model = application_chat_model.for_request(
         model_id=model_role_router.model_for("orchestrator"),
     )
+    from taichu.infrastructure.general_agent_runs.result_files import (
+        JsonContextResultStore,
+    )
+    from taichu.infrastructure.llm.context_tokens import ModelContextTokens
+    from taichu.application.general_agent.pipeline import ContextPipeline
+    from taichu.application.general_agent.pipeline_models import ContextPipelinePolicy
+
+    context_result_store = JsonContextResultStore(app_settings.project_assets_dir)
+    context_token_counter = ModelContextTokens(
+        windows=json.loads(app_settings.general_agent_model_windows_json),
+        tokenizer_paths=json.loads(app_settings.general_agent_tokenizers_json),
+    )
+    context_pipeline = ContextPipeline(
+        model=general_agent_chat_model,
+        counter=context_token_counter,
+        result_store=context_result_store,
+        store=general_agent_graph_store,
+        policy=ContextPipelinePolicy(
+            result_preview_tokens=app_settings.general_agent_result_preview_tokens,
+            extractor_model_id=model_role_router.model_for("context_extractor"),
+        ),
+        trace_repository=invocation_trace_repository,
+        memory_service=agent_memory_service,
+    )
     capability_context = CapabilityContext(
         capabilities={
             "llm": application_chat_model,
@@ -522,7 +513,7 @@ def create_app(
             "artifact_repository": artifact_repository,
             "model_role_router": model_role_router,
             "knowledge_run_store": knowledge_run_store,
-            "agent_memory_service": agent_memory_service,
+            "context_result_store": context_result_store,
             "general_agent_run_repository": general_agent_run_repository,
             "storage": storage,
             "graph_store": general_agent_graph_store,
@@ -571,9 +562,6 @@ def create_app(
         tool_registry=tool_registry,
         subagent_registry=subagent_registry,
         trace_repository=invocation_trace_repository,
-        capability_prompt_char_budget=(
-            app_settings.general_agent_capability_prompt_char_budget
-        ),
         capability_retrieval_limit=(
             app_settings.general_agent_capability_retrieval_limit
         ),
@@ -594,6 +582,7 @@ def create_app(
         policy_service=invocation_policy_service,
         memory_service=agent_memory_service,
         context_assembler=general_agent_context_assembler,
+        context_pipeline=context_pipeline,
         capability_result_repository=(general_agent_capability_result_repository),
         graph_checkpointer=general_agent_graph_checkpointer,
         graph_store=general_agent_graph_store,
@@ -874,6 +863,8 @@ def main() -> None:
         port=settings.port,
         reload=settings.backend_reload,
         reload_dirs=[reload_directory] if settings.backend_reload else None,
+        # 前端事件流是长连接，开发热重载不能无限等待它自行结束。
+        timeout_graceful_shutdown=5 if settings.backend_reload else None,
     )
 
 

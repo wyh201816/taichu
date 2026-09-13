@@ -6,10 +6,6 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from taichu.application.agent_memory.models import (
-    AgentMemoryKind,
-    AgentMemoryValidity,
-)
 from taichu.domain.models.chapter import ChapterStatus
 from taichu.domain.models.structured_knowledge import (
     StructuredKnowledgeCard,
@@ -440,86 +436,3 @@ class UpdateConfirmedKnowledgeOutput(ToolModel):
     changed_fields: list[str] = Field(default_factory=list)
     audit_ref: str
     source_refs: list[str] = Field(default_factory=list)
-
-
-class WorkingMemoryBasis(ToolModel):
-    """一条生成新状态时仍必须有效的旧工作记忆。"""
-
-    memory_id: str = Field(pattern=r"^memory_\d{8}_\d{6}_[a-z0-9]{8}$")
-    expected_state_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
-
-
-class MaintainWorkingMemoryInput(ToolModel):
-    """高层编排 Agent 对关键工作状态发出的受控维护请求。"""
-
-    operation: Literal["remember", "replace", "invalidate"]
-    kind: AgentMemoryKind | None = None
-    content: str = Field(default="", max_length=6_000)
-    target_memory_id: str | None = Field(
-        default=None,
-        pattern=r"^memory_\d{8}_\d{6}_[a-z0-9]{8}$",
-    )
-    expected_target_state_sha256: str | None = Field(
-        default=None,
-        pattern=r"^[a-f0-9]{64}$",
-    )
-    invalidation_validity: Literal["stale", "rejected"] = "stale"
-    reason: str = Field(default="", max_length=2_000)
-    source_refs: list[str] = Field(default_factory=list, max_length=100)
-    artifact_refs: list[str] = Field(default_factory=list, max_length=100)
-    basis_memories: list[WorkingMemoryBasis] = Field(
-        default_factory=list,
-        max_length=20,
-    )
-    retention: Literal[
-        "current_request",
-        "next_five_requests",
-        "until_replaced",
-    ] = "next_five_requests"
-    idempotency_key: str = Field(min_length=8, max_length=128)
-
-    @model_validator(mode="after")
-    def validate_operation(self) -> Self:
-        has_target = self.target_memory_id is not None
-        has_target_state = self.expected_target_state_sha256 is not None
-        if self.operation == "remember":
-            if self.kind is None or not self.content.strip():
-                raise ValueError("记录工作记忆必须提供类型和内容。")
-            if has_target or has_target_state:
-                raise ValueError("新增工作记忆不能指定旧记忆目标。")
-            if self.reason.strip():
-                raise ValueError("新增工作记忆不使用失效原因。")
-            if self.kind is AgentMemoryKind.FACT_REFERENCE and not self.source_refs:
-                raise ValueError("事实引用工作记忆必须提供可重新取证的来源。")
-            return self
-        if not has_target or not has_target_state:
-            raise ValueError("替代或失效旧记忆必须提供目标及其状态哈希。")
-        if self.kind is not None:
-            raise ValueError("替代或失效操作从目标记录读取类型，不能另行指定。")
-        if self.operation == "replace":
-            if not self.content.strip():
-                raise ValueError("替代工作记忆必须提供新内容。")
-            if self.reason.strip():
-                raise ValueError("替代操作通过新记录表达原因，不使用失效原因字段。")
-            return self
-        if not self.reason.strip():
-            raise ValueError("失效旧记忆必须说明当前为何不能再信任它。")
-        if self.content.strip() or self.source_refs or self.artifact_refs:
-            raise ValueError("失效操作不能夹带新的内容或来源。")
-        if self.basis_memories:
-            raise ValueError("失效操作不能创建新的记忆依赖。")
-        return self
-
-
-class MaintainWorkingMemoryOutput(ToolModel):
-    result_type: Literal["managed_working_memory"] = "managed_working_memory"
-    operation: Literal["remember", "replace", "invalidate"]
-    memory_id: str = Field(pattern=r"^memory_\d{8}_\d{6}_[a-z0-9]{8}$")
-    kind: AgentMemoryKind
-    validity: AgentMemoryValidity
-    content_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
-    state_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
-    supersedes_memory_id: str | None = Field(default=None, max_length=128)
-    expires_after_request_index: int | None = Field(default=None, ge=1)
-    message: str = Field(min_length=1, max_length=500)
-    source_refs: list[str] = Field(default_factory=list, max_length=100)

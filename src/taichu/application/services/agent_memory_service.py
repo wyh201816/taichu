@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from taichu.application.agent_memory.models import (
@@ -32,6 +32,8 @@ from taichu.application.contracts.agent_memory import (
     AgentMemoryRepository,
 )
 from taichu.application.general_agent.memory_policy import AgentMemoryPolicy
+
+from taichu.application.services.invocation_policy_service import canonical_input_hash
 
 if TYPE_CHECKING:
     from taichu.application.general_agent.models import (
@@ -131,9 +133,9 @@ class AgentMemoryService:
                 update={
                     "source_refs": source_refs,
                     "artifact_refs": artifact_refs,
-                    "run_ids": _deduplicate(
-                        [*duplicate.run_ids, *candidate.run_ids]
-                    )[:_MAX_MEMORY_RUN_IDS],
+                    "run_ids": _deduplicate([*duplicate.run_ids, *candidate.run_ids])[
+                        :_MAX_MEMORY_RUN_IDS
+                    ],
                     "created_request_index": min(
                         duplicate.created_request_index,
                         candidate.created_request_index,
@@ -240,8 +242,6 @@ class AgentMemoryService:
         return self._policy.select(
             entries,
             lexical_scores=scores,
-            top_k=query.top_k,
-            char_budget=query.char_budget,
             as_of=as_of,
         )
 
@@ -284,8 +284,6 @@ class AgentMemoryService:
             AgentMemoryValidity.STALE,
             AgentMemoryValidity.SUPERSEDED,
         ),
-        limit: int = 8,
-        char_budget: int = 8_000,
         refresh_evidence: bool = True,
     ) -> list[AgentMemoryEntry]:
         current_time = as_of or memory_now_iso()
@@ -297,20 +295,13 @@ class AgentMemoryService:
             include_deleted=False,
         )
         selected: list[AgentMemoryEntry] = []
-        used_chars = 0
         for entry in entries:
             if entry.validity not in expected or not entry.is_retained(
                 as_of=current_time,
                 request_index=current_request_index,
             ):
                 continue
-            char_count = len(entry.content) + len(entry.invalidation_reason)
-            if selected and used_chars + char_count > char_budget:
-                continue
             selected.append(entry)
-            used_chars += char_count
-            if len(selected) >= limit:
-                break
         return selected
 
     async def refresh_evidence_validity(self, conversation_id: str) -> list[str]:
@@ -604,23 +595,6 @@ class AgentMemoryService:
             await self._repository.delete(entry.memory_id, deleted_at=memory_now_iso())
         return len(entries)
 
-    async def record_user_instructions(self, run: GeneralAgentRun) -> list[str]:
-        memory_ids: list[str] = []
-        for constraint in run.author_constraints:
-            entry = await self.write(
-                MemoryWriteCandidate(
-                    kind=AgentMemoryKind.USER_INSTRUCTION,
-                    content=_compact_text(constraint, 2_000),
-                    source_refs=[f"run:{run.run_id}:user_constraints"],
-                    run_ids=[run.run_id],
-                    conversation_id=run.conversation_id,
-                    created_request_index=run.request_index,
-                    retention_priority=100,
-                )
-            )
-            memory_ids.append(entry.memory_id)
-        return memory_ids
-
     async def record_clarification_request(
         self,
         run: GeneralAgentRun,
@@ -634,7 +608,7 @@ class AgentMemoryService:
         entry = await self.write(
             MemoryWriteCandidate(
                 kind=AgentMemoryKind.UNRESOLVED_ISSUE,
-                content=_compact_text(plan.clarification_question, 1_500),
+                content=f"澄清执行记录：等待回答；问题指纹={canonical_input_hash({'question': plan.clarification_question})}",
                 source_refs=[request_ref],
                 run_ids=[run.run_id],
                 conversation_id=run.conversation_id,
@@ -674,7 +648,7 @@ class AgentMemoryService:
         entry = await self.write(
             MemoryWriteCandidate(
                 kind=AgentMemoryKind.WORK_NOTE,
-                content=_compact_text(content, 2_000),
+                content=f"澄清执行记录：已回答；回答指纹={canonical_input_hash({'answer': content})}",
                 source_refs=[response_ref],
                 run_ids=[run.run_id],
                 conversation_id=run.conversation_id,
@@ -705,23 +679,6 @@ class AgentMemoryService:
             if entry.producer_ref is not None
         }
         for node in _topological_node_runs(nodes):
-            if node.output.get("result_type") == "managed_working_memory":
-                managed_memory_id = node.output.get("memory_id")
-                if not isinstance(managed_memory_id, str):
-                    raise AgentMemoryServiceError("工作记忆维护工具结果缺少记忆标识。")
-                managed_memory = await self._repository.get(managed_memory_id)
-                if (
-                    managed_memory is None
-                    or managed_memory.conversation_id != run.conversation_id
-                ):
-                    raise AgentMemoryServiceError(
-                        "工作记忆维护工具结果不属于当前会话。"
-                    )
-                memory_ids.append(managed_memory.memory_id)
-                continue
-            output_summary = _summarize_output(node.output)
-            if not output_summary and not node.source_refs and not node.artifact_refs:
-                continue
             result_type = _node_result_type(node)
             dependencies: list[AgentMemoryDependency] = []
             reuse_proof: ProducerMemoryValidityProof | None = None
@@ -785,11 +742,7 @@ class AgentMemoryService:
                 if has_resource
                 else AgentMemoryKind.WORK_NOTE
             )
-            label = "资源摘要" if has_resource else "过程摘要"
-            content = _compact_text(
-                f"{label}：{node.objective}。{output_summary}",
-                1_800,
-            )
+            content = f"节点执行记录：{node.node_id}；状态：{node.status.value}；结果指纹：{canonical_input_hash(node.output)}"
             producer_ref = _node_producer_ref(run, node)
             existing_node_memory = memory_by_producer.get(producer_ref)
             if (
@@ -823,9 +776,7 @@ class AgentMemoryService:
                     None,
                 )
             source_refs = _deduplicate(node.source_refs)[:_MAX_MEMORY_SOURCE_REFS]
-            artifact_refs = _deduplicate(node.artifact_refs)[
-                :_MAX_MEMORY_ARTIFACT_REFS
-            ]
+            artifact_refs = _deduplicate(node.artifact_refs)[:_MAX_MEMORY_ARTIFACT_REFS]
             evidence_anchors = (
                 await self.resolve_evidence_anchors(
                     source_refs=source_refs,
@@ -905,10 +856,7 @@ class AgentMemoryService:
         summary = await self.write(
             MemoryWriteCandidate(
                 kind=AgentMemoryKind.TASK_SUMMARY,
-                content=_compact_text(
-                    f"请求：{run.user_goal}\n结果：{verification.final_answer}",
-                    2_400,
-                ),
+                content=f"校验执行记录：{verification.outcome}；依据指纹：{basis_sha256}",
                 source_refs=[
                     f"run:{run.run_id}:verification",
                     f"result-basis:{basis_sha256}",
@@ -936,22 +884,6 @@ class AgentMemoryService:
             )
         )
         memory_ids = [summary.memory_id]
-        for issue in verification.issues:
-            if not issue.strip():
-                continue
-            entry = await self.write(
-                MemoryWriteCandidate(
-                    kind=AgentMemoryKind.UNRESOLVED_ISSUE,
-                    content=_compact_text(issue, 1_200),
-                    source_refs=[f"run:{run.run_id}:verification_issue"],
-                    run_ids=[run.run_id],
-                    conversation_id=run.conversation_id,
-                    created_request_index=run.request_index,
-                    expires_after_request_index=run.request_index + 5,
-                    retention_priority=90,
-                )
-            )
-            memory_ids.append(entry.memory_id)
         return memory_ids
 
     async def record_rejected_verification(
@@ -961,16 +893,10 @@ class AgentMemoryService:
     ) -> str:
         """保留失败校验作为修复信息，但不允许其充当当前任务结论。"""
 
-        details = [
-            f"未通过校验的候选回答：{verification.final_answer}",
-            *[f"问题：{issue}" for issue in verification.issues if issue.strip()],
-        ]
-        if verification.replan_guidance.strip():
-            details.append(f"修复方向：{verification.replan_guidance}")
         entry = await self.write(
             MemoryWriteCandidate(
                 kind=AgentMemoryKind.WORK_NOTE,
-                content=_compact_text("\n".join(details), 4_000),
+                content=f"校验执行记录：被否决；产物指纹={canonical_input_hash(verification.model_dump(mode='json'))}",
                 source_refs=[f"run:{run.run_id}:rejected_verification"],
                 run_ids=[run.run_id],
                 conversation_id=run.conversation_id,
@@ -990,28 +916,6 @@ class AgentMemoryService:
             )
         )
         return entry.memory_id
-
-    async def record_direct_response(
-        self,
-        run: GeneralAgentRun,
-        *,
-        final_answer: str,
-    ) -> list[str]:
-        summary = await self.write(
-            MemoryWriteCandidate(
-                kind=AgentMemoryKind.TASK_SUMMARY,
-                content=_compact_text(
-                    f"请求：{run.user_goal}\n结果：{final_answer}",
-                    2_400,
-                ),
-                source_refs=[f"run:{run.run_id}:direct_response"],
-                run_ids=[run.run_id],
-                conversation_id=run.conversation_id,
-                created_request_index=run.request_index,
-                retention_priority=75,
-            )
-        )
-        return [summary.memory_id]
 
     async def resolve_evidence_anchors(
         self,
@@ -1238,87 +1142,6 @@ def _clarification_request_ref(run_id: str, request_id: str) -> str:
     if not normalized_request_id:
         raise AgentMemoryServiceError("澄清请求标识不能为空。")
     return f"run:{run_id}:clarification_request:{normalized_request_id}"
-
-
-def _compact_text(value: str, limit: int) -> str:
-    normalized = " ".join(value.split())
-    return normalized if len(normalized) <= limit else f"{normalized[: limit - 1]}…"
-
-
-def _summarize_output(output: dict[str, Any]) -> str:
-    if not output:
-        return ""
-    labels = {
-        "answer": "回答",
-        "summary": "摘要",
-        "rationale": "判断依据",
-        "outcome": "校验结论",
-        "direct_response": "直接回答",
-        "key_events": "关键事件",
-        "character_changes": "人物变化",
-        "issues": "发现的问题",
-        "warnings": "注意事项",
-        "unknowns": "尚不确定的内容",
-        "unresolved_items": "未解决事项",
-        "content": "内容",
-        "text": "正文",
-        "manuscript": "正文",
-        "chapter_text": "章节正文",
-    }
-    preferred_keys = tuple(labels)
-    fragments: list[str] = []
-    for key in preferred_keys:
-        if key not in output:
-            continue
-        readable = _readable_output_value(output[key])
-        if readable:
-            fragments.append(f"{labels[key]}：{readable}")
-        if len(fragments) >= 6:
-            break
-    if not fragments:
-        for key, value in output.items():
-            if key in {"lifecycle", "artifact_type", "source_refs", "artifact_refs"}:
-                continue
-            readable = _readable_output_value(value)
-            if readable:
-                fragments.append(f"结果：{readable}")
-                break
-    return _compact_text("；".join(fragments), 900)
-
-
-def _readable_output_value(value: Any) -> str:
-    if value is None or value == "":
-        return ""
-    if isinstance(value, bool):
-        return "是" if value else "否"
-    if isinstance(value, (str, int, float)):
-        text = str(value)
-        return {
-            "satisfied": "已满足请求",
-            "partial": "部分满足",
-            "failed": "未满足",
-            "high": "高",
-            "medium": "中",
-            "low": "低",
-        }.get(text, _compact_text(text, 500))
-    if isinstance(value, list):
-        items = [_readable_output_value(item) for item in value[:5]]
-        return "；".join(item for item in items if item)
-    if isinstance(value, dict):
-        for key in (
-            "claim",
-            "summary",
-            "answer",
-            "name",
-            "description",
-            "excerpt",
-            "reason",
-        ):
-            if key in value:
-                readable = _readable_output_value(value[key])
-                if readable:
-                    return readable
-    return ""
 
 
 def _later_request_expiry(left: int | None, right: int | None) -> int | None:

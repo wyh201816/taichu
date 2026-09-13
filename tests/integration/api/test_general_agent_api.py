@@ -50,10 +50,36 @@ class _DirectAnswerGateway:
             self.fail_next_orchestration = False
             raise RuntimeError("一次性模型错误")
         payload: dict[str, object]
-        if request.task_name in {
-            "general_writing_orchestrator.plan",
-            "general_writing_orchestrator.replan",
-        }:
+        if request.task_name == "context.extract":
+            fragment = json.loads(
+                next(
+                    message.content
+                    for message in request.messages
+                    if message.role == "developer"
+                )
+            )
+            sources = fragment["最近对话及新增结果"]
+            user_source = next(
+                key for key, value in sources.items() if value.get("角色") == "user"
+            )
+            payload = {
+                "task_goal": {
+                    "goal": {"content": "规划场景冲突。", "source_ids": [user_source]}
+                }
+            }
+            constraint_source = next(
+                (key for key, value in sources.items() if "作者约束" in value), None
+            )
+            if constraint_source:
+                payload["constraints"] = {
+                    "name": {
+                        "content": "不要改变秦阳的姓名。",
+                        "source_ids": [constraint_source],
+                    }
+                }
+        elif request.task_name.startswith(
+            ("general_writing_orchestrator.plan", "general_writing_orchestrator.replan")
+        ):
             if self.replan_first_verification:
                 payload = {
                     "rationale": "先读取当前小说结构，再规划需要重检的冲突场景。",
@@ -159,7 +185,12 @@ class GeneralAgentApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.gateway.requests)
         self.assertTrue(
             all(
-                request.model_id == "deepseek-v4-pro"
+                request.model_id
+                == (
+                    "deepseek-v4-flash"
+                    if request.task_name == "context.extract"
+                    else "deepseek-v4-pro"
+                )
                 for request in self.gateway.requests
             )
         )
@@ -212,11 +243,12 @@ class GeneralAgentApiTest(unittest.IsolatedAsyncioTestCase):
             run["conversation_id"],
         )
         self.assertIsNotNone(listing.json()["runs"][0]["context_snapshot_id"])
-        self.assertEqual(traces.json()["total"], 1)
+        self.assertEqual(traces.json()["total"], 2)
         self.assertEqual(
             [item["capability_name"] for item in traces.json()["traces"]],
             [
                 "general_writing_orchestrator.plan",
+                "context.extract",
             ],
         )
         self.assertTrue(
@@ -287,6 +319,7 @@ class GeneralAgentApiTest(unittest.IsolatedAsyncioTestCase):
             [request.task_name for request in self.gateway.requests],
             [
                 "general_writing_orchestrator.plan",
+                "context.extract",
             ],
         )
 
@@ -301,7 +334,7 @@ class GeneralAgentApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.status_code, 200)
         run = response.json()["run"]
-        self.assertEqual(run["status"], "completed")
+        self.assertEqual(run["status"], "completed", run.get("errors"))
         self.assertEqual(run["replan_count"], 1)
 
         snapshots = await self.client.get(
@@ -310,14 +343,23 @@ class GeneralAgentApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(snapshots.status_code, 200)
         payload = snapshots.json()
-        self.assertEqual(payload["total"], 4)
+        expected_phases = [
+            request.task_name.removeprefix("general_writing_orchestrator.")
+            for request in self.gateway.requests
+            if request.task_name.startswith("general_writing_orchestrator.")
+        ]
+        self.assertEqual(payload["total"], len(expected_phases))
         self.assertEqual(
             [item["phase"] for item in payload["snapshots"]],
+            [phase.split(".")[0] for phase in expected_phases],
+        )
+        self.assertEqual(
+            [phase for phase in expected_phases if "." not in phase],
             ["plan", "verify", "replan", "verify"],
         )
         self.assertEqual(
             len({item["snapshot_id"] for item in payload["snapshots"]}),
-            4,
+            len(expected_phases),
         )
 
     async def test_failed_run_resume_clears_recovered_error(self) -> None:
@@ -448,22 +490,31 @@ class GeneralAgentApiTest(unittest.IsolatedAsyncioTestCase):
             f"conversations/{conversation_id}/memories"
         )
         self.assertEqual(listing.status_code, 200)
-        memories = listing.json()["memories"]
-        self.assertGreaterEqual(len(memories), 2)
-        instruction = next(
-            item for item in memories if item["kind"] == "user_instruction"
+        # 该入口只保留旧记录及执行有效性审计；不再双写语义记忆。
+        self.assertEqual(listing.json()["memories"], [])
+        memory = run["context_pipeline"]["working_memory"]
+        self.assertEqual(
+            set(memory),
+            {
+                "task_goal",
+                "file_list",
+                "workflow_state",
+                "error_knowledge",
+                "constraints",
+            },
         )
-        summary = next(item for item in memories if item["kind"] == "task_summary")
-        self.assertTrue(all("lifecycle" not in item for item in memories))
-
-        detail = await self.client.get(
-            f"/api/agent-workbench/general-assistant/memories/{summary['memory_id']}"
+        self.assertEqual(
+            memory["constraints"]["name"]["content"], "不要改变秦阳的姓名。"
         )
-        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(
+            memory["constraints"]["name"]["source_ids"],
+            [f"request:{run['run_id']}:constraints"],
+        )
+        self.assertTrue(memory["task_goal"])
+        self.assertNotIn("lifecycle", json.dumps(memory))
 
         rejected_delete = await self.client.delete(
-            "/api/agent-workbench/general-assistant/"
-            f"memories/{instruction['memory_id']}"
+            "/api/agent-workbench/general-assistant/memories/name"
         )
         self.assertEqual(rejected_delete.status_code, 405)
         rejected_create = await self.client.post(
@@ -472,10 +523,8 @@ class GeneralAgentApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(rejected_create.status_code, 404)
         visible = await self.client.get(
-            "/api/agent-workbench/general-assistant/"
-            f"conversations/{conversation_id}/memories"
+            f"/api/agent-workbench/general-assistant/runs/{run['run_id']}"
         )
-        self.assertIn(
-            instruction["memory_id"],
-            {item["memory_id"] for item in visible.json()["memories"]},
+        self.assertEqual(
+            visible.json()["run"]["context_pipeline"]["working_memory"], memory
         )

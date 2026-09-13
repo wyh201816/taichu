@@ -33,7 +33,6 @@ from taichu.application.capabilities import CapabilityContext
 from taichu.application.agent_memory.models import (
     AgentMemoryKind,
     AgentMemoryValidity,
-    memory_now_iso,
 )
 from taichu.application.contracts.general_agent_capability_results import (
     CapabilityResultOwner,
@@ -546,15 +545,14 @@ async def test_explicit_chapter_summary_selects_and_fills_parameters_in_one_call
         if node.node_id == "summarize_chapter"
         and node.status is GeneralAgentNodeStatus.SUCCESS
     )
-    assert "第8章正文内容。" in summary_node.resolved_input["source_request"][
-        "direct_context"
-    ]
+    assert (
+        "第8章正文内容。"
+        in summary_node.resolved_input["source_request"]["direct_context"]
+    )
     assert summary_node.resolved_input["source_request"]["auto_collect"] is False
     assert any(
         item.startswith("manuscript:")
-        for item in summary_node.resolved_input["source_request"][
-            "direct_source_refs"
-        ]
+        for item in summary_node.resolved_input["source_request"]["direct_source_refs"]
     )
     assert any(
         source_ref.startswith("manuscript:")
@@ -601,11 +599,11 @@ async def test_runtime_recovers_invalid_data_handoff_after_runtime_failure(
                     "source_request": {"auto_collect": False},
                 },
                 "dependencies": ["read_chapter"],
-                    "input_bindings": [
-                        {
-                            "source_node_id": "read_chapter",
-                            "source_path": "chunks.99.content",
-                            "target_path": "source_request.direct_context",
+                "input_bindings": [
+                    {
+                        "source_node_id": "read_chapter",
+                        "source_path": "chunks.99.content",
+                        "target_path": "source_request.direct_context",
                     }
                 ],
             },
@@ -883,7 +881,11 @@ async def test_replan_invalidates_intermediate_answer_and_memory(
         include_deleted=False,
     )
     assert len(memories) == 1
-    assert "第二版有效回答" in memories[0].content
+    assert "校验执行记录" in memories[0].content
+    assert (
+        memories[0].producer_ref
+        == f"verification:{run.run_id}:{run.plan_revision}:final"
+    )
     assert "第一版、已经失效" not in memories[0].content
     assert f"result-basis:{run.final_answer_basis_sha256}" in memories[0].source_refs
 
@@ -1039,17 +1041,6 @@ async def test_runtime_pauses_for_bound_write_and_resumes_from_checkpoint(
     )
     assert preview_node.status is GeneralAgentNodeStatus.SUCCESS
 
-    memory_repository = in_memory_agent_memory_repository(tmp_path)
-    automatic_memories = await memory_repository.query(
-        conversation_id=waiting.conversation_id
-    )
-    author_memory = next(
-        memory
-        for memory in automatic_memories
-        if memory.kind is AgentMemoryKind.USER_INSTRUCTION
-    )
-    await memory_repository.delete(author_memory.memory_id, deleted_at=memory_now_iso())
-
     completed = await runtime.resume(waiting.run_id, approve=True)
 
     persisted = await runtime.get(waiting.run_id)
@@ -1076,9 +1067,6 @@ async def test_runtime_pauses_for_bound_write_and_resumes_from_checkpoint(
     assert apply_node.status is GeneralAgentNodeStatus.SUCCESS
     assert apply_node.authorization_grant_id is not None
     assert apply_node.resolved_input["patch_id"] == preview_node.output["patch_id"]
-    assert author_memory.memory_id not in {
-        reference.memory_id for reference in completed.context_snapshot.memory_refs
-    }
 
     await chapter_service.save_chapter(chapter_id, original)
     rejected_waiting = await runtime.run(
@@ -1158,10 +1146,7 @@ async def test_runtime_clarifies_then_completes_direct_response_without_verifica
         if message.message_type is GeneralAgentMessageType.HUMAN_PROMPT
     )
     assert prompt_message.turn_id == waiting.run_id
-    assert (
-        prompt_message.human_request_id
-        == waiting.pending_human_request.request_id
-    )
+    assert prompt_message.human_request_id == waiting.pending_human_request.request_id
 
     completed = await runtime.resume(waiting.run_id, answer="第三人称限知。")
 
@@ -1479,7 +1464,7 @@ async def test_runtime_startup_resumes_same_langgraph_run_after_process_crash(
                         "input_data": {},
                     }
                 ],
-            }
+            },
         ],
         verification={
             "outcome": "satisfied",
@@ -1871,7 +1856,7 @@ def _runtime(
             for manifest in subagent_registry.list_manifests()
         },
     }
-    return GeneralAgentRuntimeService(
+    runtime = GeneralAgentRuntimeService(
         repository=JsonGeneralAgentRunRepository(root),
         event_center=GeneralAgentEventCenter(),
         orchestrator=OrchestratorAgent(
@@ -1901,6 +1886,16 @@ def _runtime(
         tool_budget_repository=tool_budget_repository,
         fault_hook=fault_hook,
     )
+    # 编排脚本模型不承担摘要质量测试；这里仍走真实结果落盘和确定性预览。
+    from tests.unit.application.general_agent.test_context_pipeline import engine
+
+    result_pipeline = engine(root, [])
+
+    async def project_results(run):
+        return await result_pipeline.prepare(run, extract=False)
+
+    runtime._executor.bind_context_boundary(project_results)
+    return runtime
 
 
 _TEST_CHECKPOINTERS: dict[Path, InMemorySaver] = {}

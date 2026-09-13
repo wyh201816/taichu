@@ -47,6 +47,36 @@ from taichu.application.services.agent_memory_service import AgentMemoryService
 router = APIRouter(prefix="/api/agent-workbench/general-assistant")
 
 
+@router.post("/conversations/{conversation_id}/compact")
+async def api_compact_context(
+    conversation_id: str,
+    service: GeneralAgentRuntimeService = Depends(
+        provide_general_agent_runtime_service
+    ),
+) -> dict:
+    """合并为一次待执行的会话操作，不新增消息或用户轮。"""
+    try:
+        request = await service.request_context_compaction(conversation_id)
+    except GeneralAgentConversationNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except GeneralAgentRuntimeError as error:
+        raise _unprocessable(str(error)) from error
+    return {"operation": request}
+
+
+@router.get("/conversations/{conversation_id}/compact")
+async def api_context_compaction_status(
+    conversation_id: str,
+    service: GeneralAgentRuntimeService = Depends(
+        provide_general_agent_runtime_service
+    ),
+) -> dict:
+    try:
+        return {"operation": await service.context_compaction_status(conversation_id)}
+    except GeneralAgentConversationNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @router.post("/runs", response_model=GeneralAgentRunResponse)
 async def api_run_general_agent(
     request: GeneralAgentRunRequest,

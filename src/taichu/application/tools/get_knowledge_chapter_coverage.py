@@ -32,7 +32,6 @@ manifest = ToolManifest(
     required_capabilities=frozenset({"chapter_service", "knowledge_service"}),
     exposures=frozenset({"agent_runtime"}),
     allowed_callers=INTERNAL_READ_CALLERS,
-    max_result_chars=100_000,
     retryable=True,
 )
 
@@ -50,9 +49,7 @@ async def run(
         run_id=invocation.run_id,
         stage=invocation.phase,
     )
-    chapters = await context.require(
-        "chapter_service", ChapterService
-    ).list_chapters()
+    chapters = await context.require("chapter_service", ChapterService).list_chapters()
     chapter_by_id = {chapter.id: chapter for chapter in chapters}
 
     cards_by_chapter: dict[str, set[str]] = defaultdict(set)

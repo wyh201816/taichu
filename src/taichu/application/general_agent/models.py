@@ -11,6 +11,13 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+from taichu.application.general_agent.pipeline_models import (
+    ContextPipelineState,
+    SessionWorkingMemory,
+    ContextPipelineEvent,
+)
+
+
 class GeneralAgentModel(BaseModel):
     """拒绝额外字段的不可变 Runtime 模型。"""
 
@@ -334,9 +341,9 @@ class GeneralAgentContextMemory(GeneralAgentModel):
         pattern=r"^[a-f0-9]{64}$",
     )
     validity: Literal["active", "stale", "rejected", "superseded"] = "active"
-    previous_validity: Literal[
-        "active", "stale", "rejected", "superseded"
-    ] | None = None
+    previous_validity: Literal["active", "stale", "rejected", "superseded"] | None = (
+        None
+    )
     invalidation_reason: str = Field(default="", max_length=2_000)
     invalidated_by_memory_id: str | None = Field(default=None, max_length=128)
     supersedes_memory_id: str | None = Field(default=None, max_length=128)
@@ -365,19 +372,6 @@ class GeneralAgentContextMemory(GeneralAgentModel):
         return payload
 
 
-class ContextDigest(GeneralAgentModel):
-    """工作记忆压缩后的结构化摘要，不承担小说事实职责。"""
-
-    user_instructions: list[str] = Field(default_factory=list, max_length=100)
-    task_summaries: list[str] = Field(default_factory=list, max_length=100)
-    completed_nodes: list[str] = Field(default_factory=list, max_length=100)
-    fact_source_refs: list[str] = Field(default_factory=list, max_length=200)
-    unresolved_issues: list[str] = Field(default_factory=list, max_length=100)
-    next_conditions: list[str] = Field(default_factory=list, max_length=100)
-    omitted_counts: dict[str, int] = Field(default_factory=dict)
-    original_source_ids: list[str] = Field(default_factory=list, max_length=500)
-
-
 class GeneralAgentCurrentRequest(GeneralAgentModel):
     """完整保留且最后才允许触及的当前请求层。"""
 
@@ -396,13 +390,14 @@ class GeneralAgentWorkingMemory(GeneralAgentModel):
     node_summaries: list[dict[str, Any]] = Field(default_factory=list)
     unresolved_issues: list[str] = Field(default_factory=list, max_length=100)
     replan_guidance: str = Field(default="", max_length=20_000)
-    digest: ContextDigest | None = None
+    session_memory: SessionWorkingMemory = Field(default_factory=SessionWorkingMemory)
+    excluded_result_sources: list[str] = Field(default_factory=list)
 
 
 class GeneralAgentHistoryMemory(GeneralAgentModel):
     """完整对话历史的受预算投影，不包含任何内部运行记录。"""
 
-    summary: str = Field(default="", max_length=24_000)
+    summary: str = ""
     messages: list[GeneralAgentMessage] = Field(default_factory=list)
     total_message_count: int = Field(default=0, ge=0)
     omitted_message_count: int = Field(default=0, ge=0)
@@ -426,6 +421,9 @@ class GeneralAgentContextEnvelope(GeneralAgentModel):
     estimated_token_count: int = Field(default=0, ge=0)
     compressed: bool = False
     fallback_used: bool = False
+    context_window_tokens: int = 0
+    token_count_method: str = "未计量"
+    pipeline_events: list[ContextPipelineEvent] = Field(default_factory=list)
 
     @property
     def current_goal(self) -> str:
@@ -446,10 +444,6 @@ class GeneralAgentContextEnvelope(GeneralAgentModel):
     @property
     def runtime_memories(self) -> list[GeneralAgentContextMemory]:
         return self.working_memory.memories
-
-    @property
-    def digest(self) -> ContextDigest | None:
-        return self.working_memory.digest
 
     @property
     def plan_summary(self) -> dict[str, Any] | None:
@@ -645,6 +639,40 @@ class GeneralAgentContextSnapshot(GeneralAgentModel):
     assembly_trace: GeneralAgentAssemblyTrace | None = None
     content_sha256: str = Field(min_length=64, max_length=64)
 
+    original_content_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_snapshot_projection(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        raw_envelope = payload.get("envelope")
+        if not isinstance(raw_envelope, dict):
+            return value
+        original_hash = payload.get("content_sha256")
+        original_payload = {
+            key: item for key, item in payload.items() if key != "content_sha256"
+        }
+        if original_hash != context_snapshot_sha256(original_payload):
+            return value  # 后续校验拒绝被改写的审计。
+        envelope = dict(raw_envelope)
+        working = dict(envelope.get("working_memory", {}))
+        legacy = "digest" in working or "context_window_tokens" not in envelope
+        working.pop("digest", None)
+        envelope["working_memory"] = working
+        payload["envelope"] = GeneralAgentContextEnvelope.model_validate(
+            envelope
+        ).model_dump(mode="json")
+        payload.setdefault("assembly_trace", None)
+        payload.setdefault("memory_refs", [])
+        payload.setdefault("policy_snapshot", {})
+        payload.setdefault("original_content_sha256", original_hash if legacy else None)
+        payload["content_sha256"] = context_snapshot_sha256(
+            {key: item for key, item in payload.items() if key != "content_sha256"}
+        )
+        return payload
+
     @model_validator(mode="after")
     def validate_snapshot_hash(self) -> Self:
         current_payload = self.model_dump(mode="json", exclude={"content_sha256"})
@@ -691,6 +719,7 @@ class GeneralAgentRun(GeneralAgentModel):
     limits: GeneralAgentRunLimits = Field(default_factory=GeneralAgentRunLimits)
     status: GeneralAgentRunStatus = GeneralAgentRunStatus.INIT
     messages: list[GeneralAgentMessage] = Field(default_factory=list)
+    context_pipeline: ContextPipelineState = Field(default_factory=ContextPipelineState)
     current_request_message_id: str | None = Field(
         default=None,
         pattern=r"^message_[a-f0-9]{32}$",
@@ -723,9 +752,7 @@ class GeneralAgentRun(GeneralAgentModel):
     checkpoint_revision: int = Field(
         default=0,
         ge=0,
-        description=(
-            "历史字段名，仅表示业务投影保存序号；不得用于 LangGraph 恢复。"
-        ),
+        description=("历史字段名，仅表示业务投影保存序号；不得用于 LangGraph 恢复。"),
     )
     resumable: bool = True
     created_at: str = Field(min_length=1)
@@ -857,7 +884,9 @@ def _migrate_legacy_message_identities(payload: dict[str, Any]) -> None:
         for item in raw_messages
     ]
     run_id = str(payload.get("run_id") or "legacy_run")
-    conversation_id = str(payload.get("conversation_id") or payload.get("task_id") or run_id)
+    conversation_id = str(
+        payload.get("conversation_id") or payload.get("task_id") or run_id
+    )
     request_index = max(1, int(payload.get("request_index") or 1))
     user_goal = payload.get("user_goal")
     current_request_message_id = payload.get("current_request_message_id")
@@ -908,8 +937,13 @@ def _migrate_legacy_message_identities(payload: dict[str, Any]) -> None:
                 == GeneralAgentMessageType.USER_REQUEST.value
             ):
                 inferred_current_request_id = str(message["message_id"])
-            if message.get("message_type") == GeneralAgentMessageType.HUMAN_PROMPT.value:
-                active_human_request_id = str(message.get("human_request_id") or "") or None
+            if (
+                message.get("message_type")
+                == GeneralAgentMessageType.HUMAN_PROMPT.value
+            ):
+                active_human_request_id = (
+                    str(message.get("human_request_id") or "") or None
+                )
             migrated.append(message)
             continue
 

@@ -19,6 +19,8 @@ class PublicLLMModel(BaseModel):
     enabled: bool
     is_default: bool
     supports_streaming: bool
+    context_window_tokens: int | None = None
+    token_count_method: str = "未计量"
     availability: str = "unknown"
     last_probed_at: str | None = None
     availability_error: str | None = None

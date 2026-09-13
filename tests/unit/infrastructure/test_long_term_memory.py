@@ -33,8 +33,6 @@ def test_markdown_long_term_memory_retrieves_relevant_and_global_entries(
     result = asyncio.run(
         MarkdownLongTermMemoryRetriever(path).retrieve(
             "帮我写一段战斗场景",
-            top_k=5,
-            char_budget=2_000,
         )
     )
 

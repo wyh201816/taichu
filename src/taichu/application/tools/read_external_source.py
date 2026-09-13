@@ -28,7 +28,6 @@ manifest = ToolManifest(
     allowed_callers=EXTERNAL_RESEARCH_CALLERS,
     requires_external_access=True,
     default_timeout_seconds=30,
-    max_result_chars=120_000,
     retryable=True,
 )
 

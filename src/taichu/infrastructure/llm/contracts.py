@@ -46,6 +46,8 @@ class LLMTransportProfile(LLMModelProfile):
             ),
             currency=self.currency,
             upstream_verified=self.upstream_verified,
+            context_window_tokens=self.context_window_tokens,
+            token_count_method=self.token_count_method,
         )
 
 

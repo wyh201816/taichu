@@ -239,8 +239,6 @@ class AgentMemoryQuery(AgentMemoryModel):
     query_text: str = Field(default="", max_length=40_000)
     kinds: list[AgentMemoryKind] = Field(default_factory=list, max_length=20)
     run_id: str | None = Field(default=None, max_length=128)
-    top_k: int | None = Field(default=None, ge=1, le=100)
-    char_budget: int | None = Field(default=None, ge=1, le=200_000)
     as_of: str | None = Field(default=None, max_length=64)
 
 
@@ -334,9 +332,7 @@ def memory_source_fingerprint(entry: AgentMemoryEntry) -> str:
 
 def memory_dependency_fingerprint(
     *,
-    dependencies: list[
-        tuple[str, AgentMemoryDependencyRelation, str]
-    ],
+    dependencies: list[tuple[str, AgentMemoryDependencyRelation, str]],
     supersession: tuple[str, str] | None,
 ) -> str:
     payload = {
@@ -352,9 +348,7 @@ def memory_dependency_fingerprint(
 def producer_validity_proof_sha256(
     proof: ProducerMemoryValidityProof,
 ) -> str:
-    return _canonical_sha256(
-        proof.model_dump(mode="json", exclude={"observed_at"})
-    )
+    return _canonical_sha256(proof.model_dump(mode="json", exclude={"observed_at"}))
 
 
 def _canonical_sha256(payload: Any) -> str:

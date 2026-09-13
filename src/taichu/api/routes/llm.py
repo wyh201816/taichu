@@ -204,6 +204,8 @@ def _public_model(
         enabled=profile.enabled,
         is_default=profile.is_default,
         supports_streaming=profile.supports_streaming,
+        context_window_tokens=profile.context_window_tokens,
+        token_count_method=profile.token_count_method,
         availability=state.availability,
         last_probed_at=state.last_probed_at,
         availability_error=state.error,

@@ -426,6 +426,19 @@ class MemoryBehaviorGateReport(BenchmarkModel):
     evidence_refs: tuple[StableId, ...]
 
 
+def _session_source_ids(working: Any) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                source
+                for field in type(working.session_memory).model_fields
+                for item in getattr(working.session_memory, field).values()
+                for source in item.source_ids
+            }
+        )
+    )
+
+
 class MemoryBehaviorProjector:
     """把真实上下文、模型请求、分支信封和最终答案投影为行为证据。"""
 
@@ -510,9 +523,8 @@ class MemoryBehaviorProjector:
             "carriers": carriers,
             "invalid_memories": (),
             "branch_topology": (),
-            "current_memory_ids": tuple(
-                item.memory_id
-                for item in candidate_snapshot.envelope.working_memory.memories
+            "current_memory_ids": _session_source_ids(
+                candidate_snapshot.envelope.working_memory
             ),
             "repair_memory_ids": tuple(
                 item.memory_id
@@ -566,7 +578,7 @@ class MemoryBehaviorProjector:
             "basis": (
                 MemoryBehaviorCarrier.BASIS,
                 None,
-                [item.model_dump(mode="json") for item in working.memories],
+                working.session_memory.model_dump(mode="json"),
             ),
             "repair_history": (
                 MemoryBehaviorCarrier.REPAIR_HISTORY,
@@ -592,8 +604,8 @@ class MemoryBehaviorProjector:
                 MemoryBehaviorCarrier.NORMAL_DIGEST,
                 None,
                 (
-                    working.digest.model_dump(mode="json")
-                    if working.digest is not None
+                    working.session_memory.model_dump(mode="json")
+                    if working.session_memory is not None
                     else None
                 ),
             ),
@@ -607,9 +619,9 @@ class MemoryBehaviorProjector:
                         else False
                     ),
                     "digest": (
-                        fallback_working.digest.model_dump(mode="json")
+                        fallback_working.session_memory.model_dump(mode="json")
                         if fallback_working is not None
-                        and fallback_working.digest is not None
+                        and fallback_working.session_memory is not None
                         else None
                     ),
                 },
@@ -693,7 +705,7 @@ class MemoryBehaviorProjector:
             )
             for key, (carrier, branch_id, payload) in payloads.items()
         )
-        current_memory_ids = tuple(item.memory_id for item in working.memories)
+        current_memory_ids = _session_source_ids(working)
         repair_memory_ids = tuple(
             item.memory_id for item in working.invalidated_memories
         )
@@ -1057,11 +1069,8 @@ def _developer_messages(
 
 def _current_memory_payload(
     snapshot: GeneralAgentContextSnapshot,
-) -> list[dict[str, Any]]:
-    return [
-        item.model_dump(mode="json")
-        for item in snapshot.envelope.working_memory.memories
-    ]
+) -> dict[str, Any]:
+    return snapshot.envelope.working_memory.session_memory.model_dump(mode="json")
 
 
 def _invalid_state(

@@ -94,6 +94,13 @@ from taichu.application.services.invocation_policy_service import (
 )
 from taichu.application.services.agent_memory_service import AgentMemoryService
 
+from taichu.application.general_agent.pipeline import (
+    ContextPipeline,
+    ContextCapacityError,
+)
+
+from taichu.application.general_agent.context import create_snapshot
+
 _ACTIVE_STATUSES = {
     GeneralAgentRunStatus.INIT,
     GeneralAgentRunStatus.CLARIFYING,
@@ -106,9 +113,12 @@ _TERMINAL_STATUSES = {
     GeneralAgentRunStatus.COMPLETED,
     GeneralAgentRunStatus.CANCELLED,
 }
+
+
 class _RuntimeGraphState(TypedDict, total=False):
     run: dict[str, Any]
     replan_guidance: str
+    manual_compaction: bool
 
 
 class GeneralAgentRuntimeService:
@@ -132,6 +142,7 @@ class GeneralAgentRuntimeService:
         tool_budget_repository: GeneralAgentToolBudgetRepository | None = None,
         graph_store: BaseStore | None = None,
         fault_hook: GeneralAgentFaultHook | None = None,
+        context_pipeline: ContextPipeline | None = None,
     ) -> None:
         self._repository = repository
         self._event_center = event_center
@@ -141,6 +152,8 @@ class GeneralAgentRuntimeService:
         self._memory_service = memory_service
         self._executor.bind_memory_validity_provider(memory_service)
         self._context_assembler = context_assembler
+        self._context_pipeline = context_pipeline
+        self._executor.bind_context_boundary(self._after_node_batch)
         self._graph_checkpointer = graph_checkpointer
         self._graph_store = graph_store
         self._effect_repository = effect_repository
@@ -245,11 +258,23 @@ class GeneralAgentRuntimeService:
                 updated_at=created_at,
                 started_at=created_at,
             )
-            run = await self._project_run_snapshot(run, "run_created")
-            memory_ids = await self._memory_service.record_user_instructions(run)
-            if memory_ids:
-                run = _with_memory_refs(run, memory_ids)
-                run = await self._project_run_snapshot(run, "author_memories_recorded")
+            if parent_run_id:
+                previous = _run_from_graph_snapshot(
+                    await self._graph.aget_state(
+                        {"configurable": {"thread_id": resolved_conversation_id}}
+                    )
+                )
+                if previous is not None and previous.run_id == parent_run_id:
+                    run = run.model_copy(
+                        update={"context_pipeline": previous.context_pipeline}
+                    )
+            # 用户输入先进入官方线程，避免后台调度前进程中断只留下业务投影。
+            await self._graph.aupdate_state(
+                {"configurable": {"thread_id": resolved_conversation_id}},
+                {"run": run.model_dump(mode="json"), "manual_compaction": False},
+                as_node=START,
+            )
+            run = await self._project_run_snapshot(run, "context_state_inherited")
             return run
 
     async def run(
@@ -522,9 +547,7 @@ class GeneralAgentRuntimeService:
             )
             try:
                 await self._tool_budget_repository.delete(budget_owner)
-                remaining_budget = await self._tool_budget_repository.read(
-                    budget_owner
-                )
+                remaining_budget = await self._tool_budget_repository.read(budget_owner)
             except Exception as error:
                 raise GeneralAgentRuntimeError(
                     f"Tool 调用预算清理失败，父运行保持不变：{error}"
@@ -538,6 +561,28 @@ class GeneralAgentRuntimeService:
             await self._effect_repository.delete_run(run_id)
         if deleted and is_last_conversation_run:
             await self._graph_checkpointer.adelete_thread(run.conversation_id)
+        elif deleted:
+            # 删除最新一轮时同步推进官方活动边界，避免恢复时重建已删除投影。
+            remaining = [item for item in conversation_runs if item.run_id != run_id]
+            latest = remaining[-1]
+            if latest.request_index < run.request_index:
+                lock = self._conversation_locks.setdefault(
+                    run.conversation_id, asyncio.Lock()
+                )
+                async with lock:
+                    config = {"configurable": {"thread_id": run.conversation_id}}
+                    official = _run_from_graph_snapshot(
+                        await self._graph.aget_state(config)
+                    )
+                    if official is not None and official.run_id == run_id:
+                        await self._graph.aupdate_state(
+                            config,
+                            {
+                                "run": latest.model_dump(mode="json"),
+                                "manual_compaction": False,
+                            },
+                            as_node="finish_context",
+                        )
         await self._context_snapshot_repository.delete_run(run_id)
         await self._llm_replay_repository.delete_run(run_id)
         await self._event_center.delete_snapshot(run_id)
@@ -598,9 +643,7 @@ class GeneralAgentRuntimeService:
             )
         latest_checkpoint = checkpoints[0] if checkpoints else None
         checkpoint = CheckpointPersistenceSummary(
-            status=(
-                "available" if latest_checkpoint is not None else "missing"
-            ),
+            status=("available" if latest_checkpoint is not None else "missing"),
             checkpoint_count=len(checkpoints),
             latest_checkpoint_id=(
                 latest_checkpoint.checkpoint_id if latest_checkpoint else None
@@ -731,9 +774,7 @@ class GeneralAgentRuntimeService:
             raise GeneralAgentRuntimeError(
                 "当前官方 LangGraph 状态包含多个并行人工接续，无法安全匹配。"
             )
-        request = GeneralAgentHumanRequest.model_validate(
-            state.interrupts[0].value
-        )
+        request = GeneralAgentHumanRequest.model_validate(state.interrupts[0].value)
         projected = graph_run.pending_human_request
         if projected is None or projected.request_id != request.request_id:
             raise GeneralAgentRuntimeError(
@@ -803,6 +844,10 @@ class GeneralAgentRuntimeService:
                     run,
                     "langgraph_terminal_projected",
                 )
+                await self._drain_manual_request(run.run_id)
+                continue
+            if graph_state.values.get("manual_compaction"):
+                await self._drain_manual_request(run.run_id)
                 continue
             try:
                 await self._prepare_recovery(run)
@@ -1017,7 +1062,9 @@ class GeneralAgentRuntimeService:
                 GeneralAgentRunStatus.CANCELLED,
                 "作者停止了副作用未知的任务。",
             )
-            return await self._project_run_snapshot(run, "effect_reconciliation_cancelled")
+            return await self._project_run_snapshot(
+                run, "effect_reconciliation_cancelled"
+            )
 
         node = _find_current_node_or_none(run, request.node_id)
         if node is None:
@@ -1102,9 +1149,12 @@ class GeneralAgentRuntimeService:
         run_id: str,
         task: asyncio.Task[GeneralAgentRun],
     ) -> None:
-        self._tasks.pop(run_id, None)
+        if self._tasks.get(run_id) is task:
+            self._tasks.pop(run_id, None)
         if not task.cancelled():
             task.exception()
+            if self._context_pipeline is not None:
+                asyncio.create_task(self._drain_manual_request(run_id))
 
     async def _execute_run(
         self,
@@ -1125,9 +1175,7 @@ class GeneralAgentRuntimeService:
                     else 50,
                 ),
                 "max_concurrency": projection.limits.max_concurrency,
-                "configurable": {
-                    "thread_id": _runtime_thread_id(projection)
-                },
+                "configurable": {"thread_id": _runtime_thread_id(projection)},
             }
             run = projection
             if resume_from_graph or human_resume is not None:
@@ -1154,7 +1202,10 @@ class GeneralAgentRuntimeService:
                     graph_input = (
                         Command(resume=human_resume)
                         if human_resume is not None
-                        else {"run": run.model_dump(mode="json")}
+                        else {
+                            "run": run.model_dump(mode="json"),
+                            "manual_compaction": False,
+                        }
                     )
                     result: dict[str, Any] | None = None
                     if resume_from_graph and human_resume is None:
@@ -1211,9 +1262,7 @@ class GeneralAgentRuntimeService:
                         "langgraph_interrupt_projected",
                     )
                 completed = GeneralAgentRun.model_validate(result["run"])
-                audited = await self._finalize_effect_recovery_decisions(
-                    completed
-                )
+                audited = await self._finalize_effect_recovery_decisions(completed)
                 return await self._project_graph_run(
                     audited,
                     "langgraph_run_projected",
@@ -1251,15 +1300,16 @@ class GeneralAgentRuntimeService:
                 return await self._park_recovery_interrupt(run_id, error)
             except GeneralAgentRecoveryIntegrityError as error:
                 return await self._stop_unrecoverable_recovery(run_id, error)
-            except ContextAssemblyError as error:
+            except (ContextAssemblyError, ContextCapacityError) as error:
                 latest = await self._require_run(run_id)
                 failure_evidence = json.dumps(
                     {
                         "current_request_sha256": error.current_request_sha256,
-                        "protected_char_count": error.protected_char_count,
+                        "input_tokens": error.input_tokens,
                         "reason_code": error.reason_code,
                         "stable_memory_sha256": error.stable_memory_sha256,
-                        "total_char_budget": error.total_char_budget,
+                        "context_window_tokens": error.context_window_tokens,
+                        "output_tokens": error.output_tokens,
                     },
                     ensure_ascii=False,
                     sort_keys=True,
@@ -1299,6 +1349,10 @@ class GeneralAgentRuntimeService:
     def _build_graph(self) -> CompiledStateGraph:
         graph = StateGraph(_RuntimeGraphState)
         graph.add_node("initialize", self._initialize_node)
+        graph.add_node("finish_context", self._finish_context_node)
+        graph.add_node("manual_compact", self._manual_compact_node)
+        graph.add_edge("finish_context", END)
+        graph.add_edge("manual_compact", END)
         graph.add_node("plan", self._plan_node)
         graph.add_node("start_dag", self._start_dag_node)
         graph.add_node(
@@ -1313,39 +1367,215 @@ class GeneralAgentRuntimeService:
             "initialize",
             self._route_after_initialize,
             {
+                "manual": "manual_compact",
                 "plan": "plan",
                 "execute": "start_dag",
                 "verify": "verify",
                 "human": "human_input",
-                "end": END,
+                "end": "finish_context",
             },
         )
         graph.add_conditional_edges(
             "plan",
             self._route_after_plan,
-            {"execute": "start_dag", "human": "human_input", "end": END},
+            {"execute": "start_dag", "human": "human_input", "end": "finish_context"},
         )
         graph.add_edge("start_dag", "execute_dag")
         graph.add_conditional_edges(
             "execute_dag",
             self._route_after_execute,
-            {"finalize": "finalize_dag", "human": "human_input", "end": END},
+            {
+                "finalize": "finalize_dag",
+                "human": "human_input",
+                "end": "finish_context",
+            },
         )
         graph.add_edge("finalize_dag", "verify")
         graph.add_conditional_edges(
             "human_input",
             self._route_after_human_input,
-            {"plan": "plan", "execute": "start_dag", "end": END},
+            {"plan": "plan", "execute": "start_dag", "end": "finish_context"},
         )
         graph.add_conditional_edges(
             "verify",
             self._route_after_verify,
-            {"plan": "plan", "end": END},
+            {"plan": "plan", "end": "finish_context"},
         )
         return graph.compile(
             checkpointer=self._graph_checkpointer,
             store=self._graph_store,
         )
+
+    async def _after_node_batch(self, run: GeneralAgentRun) -> GeneralAgentRun:
+        # 刚完成的工具批次是活动；不能把长工具执行时间误判成会话空闲。
+        run = run.model_copy(
+            update={
+                "context_pipeline": run.context_pipeline.model_copy(
+                    update={"last_activity_at": now_iso()}
+                )
+            }
+        )
+        return await self._context_boundary(run)
+
+    async def _drain_manual_request(self, run_id: str) -> None:
+        if self._context_pipeline is None or self._shutting_down:
+            return
+        run = await self._repository.get(run_id)
+        if (
+            run is None
+            or run.status in _ACTIVE_STATUSES
+            or run.status is GeneralAgentRunStatus.WAITING_HUMAN
+        ):
+            return
+        snapshot = await self._graph.aget_state(
+            {"configurable": {"thread_id": run.conversation_id}}
+        )
+        if snapshot.next and not (
+            snapshot.values.get("manual_compaction")
+            and set(snapshot.next) <= {"manual_compact"}
+        ):
+            return  # 业务恢复点必须先继续，不能反复调度无法执行的压缩操作。
+        if await self._context_pipeline.pending_manual(
+            run.conversation_id, run.context_pipeline
+        ):
+            await self.request_context_compaction(run.conversation_id)
+
+    async def _context_boundary(
+        self, run: GeneralAgentRun, *, extract: bool = True
+    ) -> GeneralAgentRun:
+        if self._context_pipeline is None:
+            return run
+        run = await self._context_pipeline.prepare(run, extract=extract)
+        if await self._context_pipeline.pending_manual(
+            run.conversation_id, run.context_pipeline
+        ):
+            assembly = await self._context_assembler.assemble(run, phase="plan")
+            run, _ = await self._call_orchestrator(run, assembly, "compact_context")
+        return run
+
+    async def _call_orchestrator(
+        self,
+        run: GeneralAgentRun,
+        assembly: ContextAssemblyResult,
+        method: str,
+        **kwargs: Any,
+    ) -> tuple[GeneralAgentRun, Any]:
+        callback = getattr(self._orchestrator, method)
+        if self._context_pipeline is None:
+            return run, await callback(
+                run, context=assembly.snapshot.envelope, **kwargs
+            )
+        with self._context_pipeline.scope(run, assembly.snapshot.envelope) as scope:
+
+            async def save_request_snapshot(active_scope):
+                snapshot = create_snapshot(
+                    active_scope.apply(run),
+                    active_scope.envelope,
+                    assembly.snapshot.memory_refs,
+                )
+                await self._record_context_snapshot(snapshot)
+                return snapshot
+
+            scope.snapshot_callback = save_request_snapshot
+            try:
+                result = await callback(run, context=scope.envelope, **kwargs)
+            except ContextCapacityError:
+                scope.envelope = scope.envelope.model_copy(
+                    update={"pipeline_events": scope.state.events}
+                )
+                failed_snapshot = await save_request_snapshot(scope)
+                failed_run = _with_context_snapshot(
+                    scope.apply(run), ContextAssemblyResult(snapshot=failed_snapshot)
+                )
+                await self._project_run_snapshot(failed_run, "context_capacity_paused")
+                raise
+            run = scope.apply(run)
+            snapshot = scope.snapshot or await save_request_snapshot(scope)
+            run = _with_context_snapshot(run, ContextAssemblyResult(snapshot=snapshot))
+        return run, result
+
+    async def _finish_context_node(
+        self, state: _RuntimeGraphState
+    ) -> _RuntimeGraphState:
+        run = _with_visible_conversation_messages(
+            GeneralAgentRun.model_validate(state["run"])
+        )
+        run = await self._context_boundary(run)
+        run = await self._project_run_snapshot(run, "context_turn_completed")
+        return {"run": run.model_dump(mode="json"), "manual_compaction": False}
+
+    async def _manual_compact_node(
+        self, state: _RuntimeGraphState
+    ) -> _RuntimeGraphState:
+        run = await self._context_boundary(GeneralAgentRun.model_validate(state["run"]))
+        run = await self._project_run_snapshot(run, "manual_context_compacted")
+        return {"run": run.model_dump(mode="json"), "manual_compaction": False}
+
+    async def request_context_compaction(self, conversation_id: str) -> Any:
+        if self._context_pipeline is None:
+            raise GeneralAgentRuntimeError("上下文流水线尚未配置。")
+        lock = self._conversation_locks.setdefault(conversation_id, asyncio.Lock())
+        async with lock:
+            latest = (await self.get_conversation(conversation_id))[-1]
+            request = await self._context_pipeline.request_manual(
+                conversation_id, latest.context_pipeline
+            )
+            if (
+                latest.run_id not in self._tasks
+                and latest.status not in _ACTIVE_STATUSES
+                and latest.status is not GeneralAgentRunStatus.WAITING_HUMAN
+            ):
+                task = asyncio.create_task(
+                    self._execute_manual_compaction(latest.run_id)
+                )
+                self._tasks[latest.run_id] = task
+                task.add_done_callback(
+                    lambda completed: self._task_finished(latest.run_id, completed)
+                )
+            return request
+
+    async def context_compaction_status(self, conversation_id: str) -> Any:
+        if self._context_pipeline is None:
+            return None
+        latest = (await self.get_conversation(conversation_id))[-1]
+        official = _run_from_graph_snapshot(
+            await self._graph.aget_state(
+                {"configurable": {"thread_id": conversation_id}}
+            )
+        )
+        state = official.context_pipeline if official else latest.context_pipeline
+        return await self._context_pipeline.manual_status(conversation_id, state)
+
+    async def _execute_manual_compaction(self, run_id: str) -> GeneralAgentRun:
+        lock = self._locks.setdefault(run_id, asyncio.Lock())
+        async with lock:
+            run = await self._require_run(run_id)
+            config: RunnableConfig = {
+                "configurable": {"thread_id": run.conversation_id}
+            }
+            snapshot = await self._graph.aget_state(config)
+            official = _run_from_graph_snapshot(snapshot)
+            if official is not None:
+                run = official
+            resuming_manual = snapshot.values.get("manual_compaction") and set(
+                snapshot.next
+            ) <= {"manual_compact"}
+            if snapshot.next and not resuming_manual:
+                return run  # 等待现有安全边界，不能跳过中断或未完成步骤。
+            try:
+                result = await self._graph.ainvoke(
+                    None
+                    if resuming_manual
+                    else {
+                        "run": run.model_dump(mode="json"),
+                        "manual_compaction": True,
+                    },
+                    config=config,
+                )
+                return GeneralAgentRun.model_validate(result["run"])
+            except Exception:
+                # 摘要失败状态由流水线记录；原会话和图检查点仍可继续。
+                return run
 
     async def _initialize_node(self, state: _RuntimeGraphState) -> _RuntimeGraphState:
         run = GeneralAgentRun.model_validate(state["run"])
@@ -1360,6 +1590,8 @@ class GeneralAgentRuntimeService:
         return {**state, "run": run.model_dump(mode="json")}
 
     def _route_after_initialize(self, state: _RuntimeGraphState) -> str:
+        if state.get("manual_compaction"):
+            return "manual"
         status = GeneralAgentRun.model_validate(state["run"]).status
         if status is GeneralAgentRunStatus.PLANNING:
             return "plan"
@@ -1373,19 +1605,19 @@ class GeneralAgentRuntimeService:
 
     async def _plan_node(self, state: _RuntimeGraphState) -> _RuntimeGraphState:
         run = GeneralAgentRun.model_validate(state["run"])
+        run = await self._context_boundary(run, extract=False)
         phase: ContextPhase = "replan" if state.get("replan_guidance", "") else "plan"
         assembly = await self._context_assembler.assemble(
             run,
             phase=phase,
             replan_guidance=state.get("replan_guidance", ""),
         )
-        run = _with_context_snapshot(run, assembly)
-        await self._record_context_snapshot(assembly.snapshot)
+        if self._context_pipeline is None:
+            run = _with_context_snapshot(run, assembly)
+            await self._record_context_snapshot(assembly.snapshot)
         run = await self._project_run_snapshot(run, "context_assembled")
-        plan = await self._orchestrator.plan(
-            run,
-            context=assembly.snapshot.envelope,
-            replan_guidance=state.get("replan_guidance", ""),
+        run, plan = await self._call_orchestrator(
+            run, assembly, "plan", replan_guidance=state.get("replan_guidance", "")
         )
         if plan.requires_clarification:
             request = GeneralAgentHumanRequest(
@@ -1425,11 +1657,6 @@ class GeneralAgentRuntimeService:
         )
         if not plan.nodes and plan.direct_response.strip():
             final_answer = plan.direct_response.strip()
-            memory_ids = await self._memory_service.record_direct_response(
-                run,
-                final_answer=final_answer,
-            )
-            run = _with_memory_refs(run, memory_ids)
             run = run.model_copy(
                 update={
                     "verification_issues": [],
@@ -1584,11 +1811,7 @@ class GeneralAgentRuntimeService:
         run = _with_visible_conversation_messages(run)
         run = await self._merge_durable_recovery_audit(run)
         run = run.model_copy(
-            update={
-                "verification_attempt_count": (
-                    run.verification_attempt_count + 1
-                )
-            }
+            update={"verification_attempt_count": (run.verification_attempt_count + 1)}
         )
         run = _transition(run, GeneralAgentRunStatus.VERIFYING, "校验执行结果。")
         run = await self._project_run_snapshot(run, "verification_started")
@@ -1615,14 +1838,13 @@ class GeneralAgentRuntimeService:
                 "run": run.model_dump(mode="json"),
                 "replan_guidance": _execution_replan_guidance(recovery_issues),
             }
+        run = await self._context_boundary(run)
         assembly = await self._context_assembler.assemble(run, phase="verify")
-        run = _with_context_snapshot(run, assembly)
-        await self._record_context_snapshot(assembly.snapshot)
+        if self._context_pipeline is None:
+            run = _with_context_snapshot(run, assembly)
+            await self._record_context_snapshot(assembly.snapshot)
         run = await self._project_run_snapshot(run, "verification_context_assembled")
-        verification = await self._orchestrator.verify(
-            run,
-            context=assembly.snapshot.envelope,
-        )
+        run, verification = await self._call_orchestrator(run, assembly, "verify")
         if verification.should_replan and run.replan_count < run.limits.max_replans:
             rejected_memory_id = (
                 await self._memory_service.record_rejected_verification(
@@ -1773,9 +1995,7 @@ class GeneralAgentRuntimeService:
         waiting = await self._stop_recovery_for_human(run_id, error)
         config: RunnableConfig = {
             "recursion_limit": 20,
-            "configurable": {
-                "thread_id": _runtime_thread_id(waiting)
-            },
+            "configurable": {"thread_id": _runtime_thread_id(waiting)},
         }
         interrupted = False
         async for part in self._graph.astream(
@@ -1791,9 +2011,7 @@ class GeneralAgentRuntimeService:
         graph_state = await self._graph.aget_state(config)
         interrupted_run = _run_from_graph_snapshot(graph_state)
         if interrupted_run is None:
-            raise GeneralAgentRuntimeError(
-                "副作用核对 interrupt 缺少可投影运行状态。"
-            )
+            raise GeneralAgentRuntimeError("副作用核对 interrupt 缺少可投影运行状态。")
         return await self._project_graph_run(
             interrupted_run,
             "langgraph_interrupt_projected",
@@ -1845,9 +2063,7 @@ class GeneralAgentRuntimeService:
             return latest
         expected_ordinal = len(latest.recovery_decisions) + 1
         if decision.ordinal != expected_ordinal:
-            decision = decision.model_copy(
-                update={"ordinal": expected_ordinal}
-            )
+            decision = decision.model_copy(update={"ordinal": expected_ordinal})
         updated = latest.model_copy(
             update={
                 "recovery_decisions": [
@@ -1871,9 +2087,7 @@ class GeneralAgentRuntimeService:
         stored = await self._repository.get(run.run_id)
         if stored is None:
             return run
-        durable_by_id = {
-            item.decision_id: item for item in stored.recovery_decisions
-        }
+        durable_by_id = {item.decision_id: item for item in stored.recovery_decisions}
         for item in run.recovery_decisions:
             durable = durable_by_id.get(item.decision_id)
             durable_by_id[item.decision_id] = (
@@ -1881,9 +2095,7 @@ class GeneralAgentRuntimeService:
                 if durable is None
                 else _merge_recovery_decision_versions(durable, item)
             )
-        ordered_ids = [
-            item.decision_id for item in stored.recovery_decisions
-        ]
+        ordered_ids = [item.decision_id for item in stored.recovery_decisions]
         ordered_ids.extend(
             item.decision_id
             for item in run.recovery_decisions
@@ -1942,9 +2154,7 @@ class GeneralAgentRuntimeService:
                         "reason_code": "effect_reconciled",
                         "reason": "真实资源后态已确认原写入成功，恢复未重复写入。",
                         "evidence": evidence,
-                        "evidence_sha256": recovery_evidence_sha256(
-                            evidence
-                        ),
+                        "evidence_sha256": recovery_evidence_sha256(evidence),
                     }
                 )
             elif latest.status in {
@@ -1955,14 +2165,10 @@ class GeneralAgentRuntimeService:
                 updated = decision.model_copy(
                     update={
                         "action": RecoveryAction.REQUIRES_HUMAN,
-                        "reason_code": (
-                            "effect_reconciliation_requires_human"
-                        ),
+                        "reason_code": ("effect_reconciliation_requires_human"),
                         "reason": "真实资源后态无法确定原写入结果，恢复已禁止自动重写。",
                         "evidence": evidence,
-                        "evidence_sha256": recovery_evidence_sha256(
-                            evidence
-                        ),
+                        "evidence_sha256": recovery_evidence_sha256(evidence),
                     }
                 )
             else:
@@ -1972,9 +2178,7 @@ class GeneralAgentRuntimeService:
             changed = True
         if not changed:
             return run
-        return run.model_copy(
-            update={"recovery_decisions": updated_decisions}
-        )
+        return run.model_copy(update={"recovery_decisions": updated_decisions})
 
     def _emit_fault(
         self,
@@ -2141,9 +2345,7 @@ def _replace_current_node(
         else:
             node_runs.append(item)
     if not replaced:
-        raise GeneralAgentRuntimeError(
-            f"待更新节点“{replacement.node_id}”不存在。"
-        )
+        raise GeneralAgentRuntimeError(f"待更新节点“{replacement.node_id}”不存在。")
     return node_runs
 
 
@@ -2385,11 +2587,7 @@ def _with_context_snapshot(
         compressed=envelope.compressed,
         fallback_used=envelope.fallback_used,
         input_char_count=envelope.total_char_count,
-        output_char_count=(
-            len(json.dumps(envelope.digest.model_dump(mode="json"), ensure_ascii=False))
-            if envelope.digest is not None
-            else envelope.total_char_count
-        ),
+        output_char_count=envelope.total_char_count,
         estimated_token_count=envelope.estimated_token_count,
         omitted_message_count=stats.get(
             "history_memory",

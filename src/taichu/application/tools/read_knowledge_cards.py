@@ -27,7 +27,6 @@ manifest = ToolManifest(
     required_capabilities=frozenset({"knowledge_service"}),
     exposures=frozenset({"agent_runtime"}),
     allowed_callers=INTERNAL_READ_CALLERS,
-    max_result_chars=120_000,
     retryable=True,
 )
 

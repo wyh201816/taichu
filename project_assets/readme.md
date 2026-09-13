@@ -1,6 +1,6 @@
 # project_assets 目录说明
 
-> 更新日期：2026-08-30
+> 更新日期：2026-09-13
 
 `project_assets/` 是太初单本小说的本地资产根目录，用于保存正文 Markdown、工作区中间态、AI/Agent 运行记录、评测审计和临时生成文件。MongoDB `taichu.knowledge_cards` 是唯一结构事实源，`project_assets/` 下的 JSON/JSONL 不承担兼容事实源职责。
 
@@ -73,6 +73,7 @@ project_assets/
 │   ├── capability_artifacts/                    # 专业子 Agent 的有类型 JSON 中间产物
 │   ├── general_agent_runs/                      # 通用写作助手 Runtime 的业务运行投影
 │   ├── general_agent_context_snapshots/         # 规划、重规划、校验阶段的五层上下文快照历史
+│   ├── general_agent_results/                   # 内容指纹寻址的完整工具与子 Agent 结果，供模型回读
 │   ├── general_agent_effects/                   # 写入型 Tool 的追加式副作用对账日志
 │   ├── general_agent_recovery_benchmarks/        # 通用写作助手恢复机制的可重建基准报告
 │   ├── agent_evaluations/                       # 专项 Agent 效果评估输入快照、结果与审计记录
@@ -86,6 +87,12 @@ project_assets/
     ├── milvus_vector_graph/                     # 多跳图索引的运行摘要与逐来源增量清单
     └── temp/                                    # 前后端运行日志等临时输出
 ```
+
+## 五级上下文流水线的运行产物
+
+`derived/general_agent_results/` 按需创建，保存工具及专业子 Agent 的完整 JSON 结果。结果引用由会话、来源与内容指纹共同确定；相同结果生成稳定预览，读取工具可校验所属会话后按字段、文本范围或条目范围回读。程序间参数绑定使用完整结果，模型预览不作为程序数据源。
+
+`derived/general_agent_context_snapshots/` 保存模型投影、处理阶段、触发原因、前后 Token 数、来源范围与计数方式。`derived/general_agent_runs/` 保留业务审计和界面投影；增量游标、清理标记、工作记忆及压缩边界仍随原会话保存在官方 LangGraph Checkpoint。手动压缩的排队状态与子调用成功结果缓存使用既有 LangGraph Store，不另建恢复仓储。JSON 摘要和结果都是运行中间态，不能写作小说事实。
 
 ## 关键目录职责
 

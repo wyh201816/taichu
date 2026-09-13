@@ -1,21 +1,21 @@
 {
-  "recorded_on": "2026-09-01",
-  "purpose": "通用 Agent 新增受控工作记忆维护能力与默认关闭的 Opik Benchmark 观测配置，并经状态哈希、失效隔离、能力发现、Dataset 投影和评测回归复审后显式重新冻结：继续保护官方 checkpoint 单一恢复源、稳定 conversation thread、原生 Tool/structured streaming、全局 Tool 预算、供应商隔离与资源生命周期边界；未变化条目沿用原摘要",
+  "recorded_on": "2026-09-13",
+  "purpose": "按已确认的主 Agent 五级上下文流水线重新冻结：完整结果与模型投影分离，五字段增量抽取、局部和全量摘要均通过官方模型接口；保护会话检查点单一恢复源、原生契约、执行事实与小说事实隔离、预算与副作用边界。历史评测产物保留原身份。",
   "sha256": {
-    ".env.example": "8950609564a4edf939c4c4cd2b6987a93516059b42c4a5a1d161d02e383b8202",
-    "pyproject.toml": "933671be568fe7d7e2df07763ee49d3c0d2928d89296b15272c895e8491f2fd8",
+    ".env.example": "395fe0da2a57001218f3cf5879145e031b3416ab00b1c6922dd38a9bc39c657e",
+    "pyproject.toml": "45c5df01f222f4faa23b3b7ac6506b27c936425ecd6d7bee47536e99dc8f3430",
     "scripts/benchmark_general_agent_recovery.py": "fd73fbeb9ef13b3b7cf0270b148f3358ad92dae8059f0745823e38cccd7379f2",
-    "src/taichu/application/contracts/llm.py": "5551383a06d155e411d71b5a78760c96ad2cf5b41823445737ff665404ffdef2",
-    "src/taichu/application/general_agent/executor.py": "c7defc298d1455282fe990aac6249049e3ed03305dd5272c9af06e5301645fa1",
-    "src/taichu/application/general_agent/orchestrator.py": "6fe340b5b5e4a75702d537cc023ab9786a2fdfccb9e7f0f5d35ac76087d136af",
-    "src/taichu/application/invocations/models.py": "cd1e9041b32434ad199a78fa3e91071662b34b7b44f42da0a147de820aa2d033",
-    "src/taichu/application/subagents/runner.py": "6f0d8cc79c63189297fbf66c95c91922d77b7a56799e18f33b3e301cad60572c",
-    "src/taichu/config.py": "dcab2ed7aa0e8ecc4857f5e97b64923f3be7b827faa20d5b1237da6560ebc067",
-    "src/taichu/infrastructure/llm/adapter.py": "e8799ef36c9fb30e5a90f71f495501e25fa9022d26a423cc2824b4e8419acf11",
-    "src/taichu/infrastructure/llm/catalog.py": "503c627269ca1d38894f16ba5d7547b8dadb78c9a52f18c35612aa8463da53f2",
-    "src/taichu/infrastructure/llm/rightcode.py": "2889e8e4e5e54bf97cedc8d1eddfd42470d8a2057968980bd5694a1bd74696cc",
+    "src/taichu/application/contracts/llm.py": "3a5273949909513aa9fc4a208f1be1a81d369affb73391b3b9afcaccd45c4625",
+    "src/taichu/application/general_agent/executor.py": "3bc2462ba14949dfbd93125e642979c402eb53724ff8c0b60e5dc776b1f75666",
+    "src/taichu/application/general_agent/orchestrator.py": "c5ad8421f5137f68d1634d6c9adf412bf11dee23e718c63d6215cf23c902af19",
+    "src/taichu/application/invocations/models.py": "0e5f6ae0c56b237f472efc132c1c54e125a6ea3143b2739069e8713ea07ca4b4",
+    "src/taichu/application/subagents/runner.py": "0b72dfbd7f2afc84a50013993bf5784369b31015d4068909971f91140039fd99",
+    "src/taichu/config.py": "dc82352d65bc1c0b51f52fb1970ae3cc36cfb74eddbadbb95fbf13de09bf1d8d",
+    "src/taichu/infrastructure/llm/adapter.py": "b8eeb73f163aa0219bea10401b3454376cefbfe0c04ef9e8b72b813f64208fd3",
+    "src/taichu/infrastructure/llm/catalog.py": "d13b6e7bf37024fdf474dd1d71d029620d631d8d97c1051aa2854d62711f4897",
+    "src/taichu/infrastructure/llm/rightcode.py": "4e87ba49fc84a1ad3eba7b91c776a3fb92999147421a1cb735606f90d026797a",
     "start.bat": "1e4cf7819a4108e516ef86a8d2e42c85517043333583f3996516d31522c49a01",
-    "web/next.config.ts": "623e97f72e817c73037c2e9e879bb90777987d25285fb2992bfe6977e1be15a0",
-    "web/package.json": "45be5da72b34bb0406532dcd43f0459f97c99344dd2a0343e061c83ef5f46c00"
+    "web/next.config.ts": "66cbcc6ca30f899bf1230debb5a0e03bc90824abd6c949ede1c30b057f18df56",
+    "web/package.json": "034357f99277c2766221e83e464d6095ba116b65f100e818f1aa8ebac0799d23"
   }
 }

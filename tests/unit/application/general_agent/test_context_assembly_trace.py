@@ -8,7 +8,6 @@ from pathlib import Path
 
 from taichu.application.general_agent.context import (
     ContextAssembler,
-    GeneralAgentContextPolicy,
 )
 from taichu.application.general_agent.models import (
     GeneralAgentContextSnapshot,
@@ -118,15 +117,6 @@ def test_new_snapshot_contains_complete_five_layer_assembly_trace(
         return (
             await ContextAssembler(
                 memory_service=_memory_service(tmp_path),
-                policy=GeneralAgentContextPolicy(
-                    total_char_budget=12_000,
-                    history_memory_limit=4,
-                    history_memory_char_budget=2_000,
-                    node_summary_char_budget=2_200,
-                    plan_summary_char_budget=1_600,
-                    message_compaction_threshold=4,
-                    node_output_compaction_threshold=500,
-                ),
             ).assemble(_run_with_large_result(), phase="verify")
         ).snapshot
 
@@ -144,21 +134,15 @@ def test_new_snapshot_contains_complete_five_layer_assembly_trace(
     assert all(layer.pre_char_count >= layer.post_char_count for layer in trace.layers)
     assert all(layer.pre_token_estimate >= 0 for layer in trace.layers)
     assert "current_request" in trace.protected_refs
-    assert any(ref.startswith("stable_memory:") for ref in trace.protected_refs)
+    assert "stable_memory" in trace.protected_refs
     assert trace.current_request_sha256
     assert trace.stable_memory_sha256
-    assert trace.digest_used is True
-    assert trace.digest_source_ids
-
-    projection = next(
-        item for item in trace.projections if item.node_id == "source"
+    assert trace.digest_used is False
+    assert not snapshot.envelope.pipeline_events
+    assert "total_char_budget" not in snapshot.policy_snapshot
+    assert (
+        snapshot.envelope.current_request.content == _run_with_large_result().user_goal
     )
-    assert projection.original_item_count >= projection.projected_item_count
-    assert projection.omitted_item_count > 0
-    assert projection.required_output_paths == ("items",)
-    assert projection.source_refs == ("structure:root",)
-    assert projection.artifact_refs == ("artifact_structure",)
-    assert snapshot.envelope.current_request.content == _run_with_large_result().user_goal
 
 
 def test_snapshot_repository_round_trips_new_trace(tmp_path: Path) -> None:
@@ -180,6 +164,7 @@ def test_snapshot_repository_round_trips_new_trace(tmp_path: Path) -> None:
         )
 
     asyncio.run(scenario())
+
 
 def test_pre_trace_snapshot_is_read_only_compatible_and_not_backfilled(
     tmp_path: Path,

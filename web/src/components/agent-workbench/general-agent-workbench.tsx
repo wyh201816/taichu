@@ -40,6 +40,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import {
+  requestContextCompaction,
+  getContextCompactionStatus,
   cancelGeneralAgentRun,
   deleteGeneralAgentConversation,
   getGeneralAgentConversation,
@@ -66,6 +68,8 @@ import { readableEntries, splitReadableContent } from "@/lib/general-agent-memor
 import type { ChapterInfo } from "@/lib/types/chapters";
 import type {
   AgentMemoryEntry,
+  SessionWorkingMemory,
+  ContextCompactionOperation,
   GeneralAgentContextSnapshot,
   GeneralAgentConversationSummary,
   GeneralAgentNodeRun,
@@ -91,6 +95,8 @@ export function GeneralAgentWorkbench({
 }: {
   onAgentChange: (agent: WorkbenchAgent) => void;
 }) {
+  const [compaction, setCompaction] = useState<ContextCompactionOperation | null>(null);
+  const [compactionSubmitting, setCompactionSubmitting] = useState(false);
   const [chapters, setChapters] = useState<ChapterInfo[]>([]);
   const [conversations, setConversations] = useState<
     GeneralAgentConversationSummary[]
@@ -121,6 +127,16 @@ export function GeneralAgentWorkbench({
   const conversationEndRef = useRef<HTMLDivElement>(null);
   const goalInputRef = useRef<HTMLTextAreaElement>(null);
   const modelSelection = useModelSelection();
+
+  useEffect(() => {
+    let cancelled = false;
+    if (selectedConversationId) {
+      void getContextCompactionStatus(selectedConversationId).then(response => {
+        if (!cancelled) setCompaction(response.operation);
+      }).catch(() => { if (!cancelled) setCompaction(null); });
+    }
+    return () => { cancelled = true; };
+  }, [selectedConversationId]);
 
   const reloadMemories = useCallback(async (conversationId: string) => {
     if (!conversationId) {
@@ -183,6 +199,26 @@ export function GeneralAgentWorkbench({
       cancelled = true;
     };
   }, [reloadConversations]);
+
+  useEffect(() => {
+    if (!selectedConversationId || !compaction || !["queued", "running"].includes(compaction.status)) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void getContextCompactionStatus(selectedConversationId).then(async response => {
+        if (cancelled) return;
+        setCompaction(response.operation);
+        if (response.operation?.status === "completed") await reloadConversations(selectedConversationId);
+      }).catch(error => { if (!cancelled) setError(error instanceof Error ? error.message : "读取压缩状态失败。"); });
+    }, 1200);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [selectedConversationId, compaction, reloadConversations]);
+
+  async function handleCompact() {
+    setCompactionSubmitting(true);
+    try { setCompaction((await requestContextCompaction(selectedConversationId)).operation); }
+    catch (error) { setError(error instanceof Error ? error.message : "提交压缩请求失败。"); }
+    finally { setCompactionSubmitting(false); }
+  }
 
   const currentRun = conversationRuns.at(-1) ?? null;
   const selectedContextRun =
@@ -617,6 +653,13 @@ export function GeneralAgentWorkbench({
                       )}
                     />
                   </Button>
+                  <Button type="button" variant="ghost" size="sm"
+                    disabled={!selectedConversationId || compactionSubmitting || !!compaction && ["queued", "running"].includes(compaction.status)}
+                    onClick={() => void handleCompact()}
+                    className="rounded-full bg-[var(--tc-surface-card)] text-[var(--tc-text-secondary)]">
+                    {compactionSubmitting || compaction?.status === "running" ? <LoaderCircle className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    {compaction?.status === "queued" ? "压缩已排队" : compaction?.status === "running" ? "正在压缩" : "压缩上下文"}
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
@@ -627,7 +670,7 @@ export function GeneralAgentWorkbench({
                     className="rounded-full bg-[var(--tc-surface-card)] text-[var(--tc-text-secondary)]"
                   >
                     <Database className="size-3.5" />
-                    工作记忆 {memories.length || currentRun?.memory_refs.length || 0}
+                    工作记忆 {Object.values(currentRun?.context_pipeline?.working_memory ?? {}).reduce((count, items) => count + Object.keys(items).length, 0)}
                     <ChevronDown
                       className={cn(
                         "size-3.5 transition-transform duration-150 motion-reduce:transition-none",
@@ -637,8 +680,14 @@ export function GeneralAgentWorkbench({
                   </Button>
                 </div>
               </div>
+              {compaction && compaction.conversation_id === selectedConversationId ? (
+                <p role="status" className="mt-2 px-1 text-xs text-[var(--tc-text-muted)]">{compaction.message}</p>
+              ) : null}
               {memoryPanelOpen && selectedConversationId ? (
-                <GeneralMemoryPanel memories={memories} />
+                <div className="mt-3 rounded-2xl bg-[var(--tc-surface-card)] p-3">
+                  <SessionMemoryPanel memory={currentRun?.context_pipeline?.working_memory} />
+                  <details className="mt-3 text-xs text-[var(--tc-text-muted)]"><summary className="cursor-pointer">执行有效性与历史审计</summary><GeneralMemoryPanel memories={memories} /></details>
+                </div>
               ) : null}
               {contextPanelOpen && selectedConversationId ? (
                 <GeneralContextPanel
@@ -939,6 +988,20 @@ export function GeneralAgentWorkbench({
   );
 }
 
+const sessionFieldLabels: Record<keyof SessionWorkingMemory, string> = {
+  task_goal: "任务目标", file_list: "正文、资料与产物", workflow_state: "进展与待办", error_knowledge: "错误与处理经验", constraints: "用户约束",
+};
+function SessionMemoryPanel({ memory }: { memory?: SessionWorkingMemory }) {
+  return <div className="grid gap-3">{Object.entries(sessionFieldLabels).map(([field, label]) => {
+    const items = Object.entries(memory?.[field as keyof SessionWorkingMemory] ?? {});
+    return <div key={field}><p className="text-xs font-medium text-[var(--tc-text-primary)]">{label}</p>
+      {items.length ? items.map(([id, item]) => <div key={id} className="mt-1 text-xs leading-5 text-[var(--tc-text-secondary)]">
+        <MemoryReadableContent content={item.content} />
+        <details className="text-[var(--tc-text-muted)]"><summary className="cursor-pointer">查看来源</summary><p className="break-all">{item.source_ids.join("、")}</p></details>
+      </div>) : <p className="mt-1 text-xs text-[var(--tc-text-muted)]">暂无记录</p>}</div>;
+  })}</div>;
+}
+
 function GeneralMemoryPanel({
   memories,
 }: {
@@ -1129,6 +1192,16 @@ function GeneralContextPanel({
             <span>{snapshot.envelope.compressed ? "已压缩" : "未压缩"}</span>
             <span>{formatTime(snapshot.created_at)}</span>
           </div>
+          <details className="px-1 py-2 text-xs text-[var(--tc-text-muted)]">
+            <summary className="cursor-pointer">处理记录与计量详情</summary>
+            <p className="mt-2">窗口：{snapshot.envelope.context_window_tokens?.toLocaleString("zh-CN") ?? "未配置"} Token · {snapshot.envelope.token_count_method ?? "旧快照"}</p>
+            {(snapshot.envelope.pipeline_events ?? []).map(item => <div key={item.event_id} className="mt-2">
+              <p>{({ truncate: "结果截断", clear: "陈旧结果清理", extract: "工作记忆抽取", fold: "局部折叠", full: "全量压缩" })[item.stage]} · {item.reason} · {item.status === "failed" ? "失败" : item.status === "skipped" ? "跳过" : "完成"}</p>
+              <p>{item.before_tokens.toLocaleString("zh-CN")} → {item.after_tokens.toLocaleString("zh-CN")} Token</p>
+              {item.detail ? <p>{item.detail}</p> : null}
+              <details><summary className="cursor-pointer">来源范围</summary><p className="break-all">{item.source_ids.join("、") || "无新增来源"}</p></details>
+            </div>)}
+          </details>
           <div className="tc-editor-scrollbar mt-1 grid max-h-[420px] gap-2 overflow-y-auto pr-1">
             <ContextLayer
               title="稳定记忆（系统提示词）"
@@ -1176,7 +1249,7 @@ function GeneralContextPanel({
             </ContextLayer>
             <ContextLayer
               title="工作记忆"
-              summary={`${snapshot.envelope.working_memory.memories.length} 条记忆 · ${snapshot.envelope.working_memory.node_summaries.length} 个节点摘要`}
+              summary={`${Object.values(snapshot.envelope.working_memory.session_memory ?? {}).reduce((count, items) => count + Object.keys(items).length, 0)} 条运行记忆 · ${snapshot.envelope.working_memory.node_summaries.length} 个节点概览`}
             >
               <ContextMemoryList
                 memories={snapshot.envelope.working_memory.memories}
@@ -1198,8 +1271,8 @@ function GeneralContextPanel({
                 label="未解决问题"
                 items={snapshot.envelope.working_memory.unresolved_issues}
               />
-              {snapshot.envelope.working_memory.digest ? (
-                <ContextJson label="工作记忆摘要" value={snapshot.envelope.working_memory.digest} />
+              {snapshot.envelope.working_memory.session_memory ? (
+                <SessionMemoryPanel memory={snapshot.envelope.working_memory.session_memory} />
               ) : null}
             </ContextLayer>
             <ContextLayer title="当前请求" summary="完整保留" defaultOpen>

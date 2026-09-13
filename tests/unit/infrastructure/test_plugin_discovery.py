@@ -37,7 +37,7 @@ class PluginDiscoveryTest(unittest.TestCase):
         self.assertEqual(
             names,
             {
-                "maintain_working_memory",
+                "read_runtime_result",
                 "get_novel_structure",
                 "get_knowledge_chapter_coverage",
                 "read_manuscript",
@@ -57,7 +57,9 @@ class PluginDiscoveryTest(unittest.TestCase):
             },
         )
         retrieval = next(
-            plugin for plugin in plugins if plugin.manifest.name == "retrieve_story_context"
+            plugin
+            for plugin in plugins
+            if plugin.manifest.name == "retrieve_story_context"
         )
         self.assertEqual(
             retrieval.manifest.required_capabilities,

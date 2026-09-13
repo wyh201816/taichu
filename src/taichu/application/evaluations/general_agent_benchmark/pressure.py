@@ -32,7 +32,7 @@ if TYPE_CHECKING:
         ResultContractEquivalenceObservation,
         ResultContractProjection,
     )
-    from taichu.application.general_agent.context import ContextAssemblyError
+    from taichu.application.general_agent.pipeline import ContextCapacityError
     from taichu.application.general_agent.models import (
         GeneralAgentExecutionPlan,
         GeneralAgentContextSnapshot,
@@ -980,14 +980,9 @@ class PressureBehaviorEvaluator:
             item for item in seed.working_memories if item.protected_fact_refs
         )
         if protected_memories:
-            actual_memories = snapshot.envelope.working_memory.memories
+            actual_memories = _session_items(snapshot)
             protected_memory_ok = all(
-                any(
-                    actual.kind == expected.kind
-                    and actual.content == expected.content
-                    and set(expected.source_refs) <= set(actual.source_refs)
-                    for actual in actual_memories
-                )
+                any(actual["content"] == expected.content for actual in actual_memories)
                 for expected in protected_memories
             )
             checks.append(
@@ -1063,7 +1058,7 @@ class PressureBehaviorEvaluator:
         checks.append(
             PressureBehaviorCheck(
                 check_id="omission_priority_respected",
-                description="低优先级载体先退出且保护引用没有进入遗漏集合。",
+                description="受保护输入没有被逐层删除，结果可按完整引用回读。",
                 satisfied=omission_ok,
                 evidence_refs=tuple(trace.omitted_item_refs),
             )
@@ -1439,15 +1434,15 @@ class PressureMemoryIsolationProjector:
                 ],
             },
             "digest": (
-                normal_working.digest.model_dump(mode="json")
-                if normal_working.digest is not None
+                normal_working.session_memory.model_dump(mode="json")
+                if normal_working.session_memory is not None
                 else None
             ),
             "fallback": {
                 "fallback_used": fallback_snapshot.envelope.fallback_used,
                 "digest": (
-                    fallback_working.digest.model_dump(mode="json")
-                    if fallback_working.digest is not None
+                    fallback_working.session_memory.model_dump(mode="json")
+                    if fallback_working.session_memory is not None
                     else None
                 ),
             },
@@ -1513,10 +1508,10 @@ class PressureMemoryIsolationProjector:
 class PressureUnsafeRefusalArtifact(BenchmarkModel):
     """在模型规划与能力调用前形成的密封 fail-closed 证据。"""
 
-    schema_: Literal["taichu.general_agent_benchmark.pressure_unsafe_refusal@1"] = (
+    schema_: Literal["taichu.general_agent_benchmark.pressure_unsafe_refusal@2"] = (
         Field(
             alias="schema",
-            default="taichu.general_agent_benchmark.pressure_unsafe_refusal@1",
+            default="taichu.general_agent_benchmark.pressure_unsafe_refusal@2",
         )
     )
     pressure_plan_ref: StableId
@@ -1528,8 +1523,8 @@ class PressureUnsafeRefusalArtifact(BenchmarkModel):
     recovery_action: Literal["stop"] = "stop"
     reason_code: Literal["unsafe_context"] = "unsafe_context"
     message: str = Field(min_length=1, max_length=2_000)
-    total_char_budget: int = Field(ge=0)
-    protected_char_count: int = Field(gt=0)
+    context_window_tokens: int = Field(ge=0)
+    input_tokens: int = Field(gt=0)
     current_request_char_count: int = Field(gt=0)
     current_request_byte_sha256: Sha256
     current_request_canonical_sha256: Sha256
@@ -1541,11 +1536,8 @@ class PressureUnsafeRefusalArtifact(BenchmarkModel):
 
     @model_validator(mode="after")
     def _refusal_is_sealed(self) -> Self:
-        if (
-            self.protected_char_count <= self.total_char_budget
-            and self.current_request_char_count <= 100_000
-        ):
-            raise ValueError("安全拒绝证据要求受保护上下文超过总预算或单层上限。")
+        if self.input_tokens <= self.context_window_tokens:
+            raise ValueError("安全拒绝证据要求必要输入超过模型窗口。")
         payload = self.model_dump(
             mode="python",
             by_alias=True,
@@ -1561,9 +1553,9 @@ class PressureUnsafeRefusalArtifact(BenchmarkModel):
         *,
         plan: PressurePlan,
         seed: PressureSeed,
-        error: ContextAssemblyError,
+        error: ContextCapacityError,
     ) -> PressureUnsafeRefusalArtifact:
-        from taichu.application.general_agent.context import ContextAssemblyError
+        from taichu.application.general_agent.pipeline import ContextCapacityError
 
         if plan.kind is not PressureKind.UNSAFE_TOTAL:
             raise ValueError("安全拒绝证据只接受 unsafe_total 压力计划。")
@@ -1573,21 +1565,21 @@ class PressureUnsafeRefusalArtifact(BenchmarkModel):
             or seed.content_hash is None
         ):
             raise ValueError("安全拒绝种子与 PressurePlan 身份不一致。")
-        if not isinstance(error, ContextAssemblyError):
-            raise TypeError("安全拒绝证据必须来自 ContextAssemblyError。")
+        if not isinstance(error, ContextCapacityError):
+            raise TypeError("安全拒绝证据必须来自 ContextCapacityError。")
         current_request_sha256 = sha256(
             seed.current_request.encode("utf-8")
         ).hexdigest()
         if (
             error.reason_code != "unsafe_context"
-            or error.total_char_budget is None
-            or error.protected_char_count is None
+            or error.context_window_tokens is None
+            or error.input_tokens is None
             or error.current_request_sha256 != current_request_sha256
             or error.stable_memory_sha256 is None
         ):
-            raise ValueError("ContextAssemblyError 缺少可核验的不安全上下文证据。")
+            raise ValueError("ContextCapacityError 缺少可核验的不安全上下文证据。")
         payload = {
-            "schema": ("taichu.general_agent_benchmark.pressure_unsafe_refusal@1"),
+            "schema": ("taichu.general_agent_benchmark.pressure_unsafe_refusal@2"),
             "pressure_plan_ref": plan.plan_id,
             "pressure_plan_hash": plan.content_hash,
             "pressure_seed_hash": seed.content_hash,
@@ -1597,8 +1589,8 @@ class PressureUnsafeRefusalArtifact(BenchmarkModel):
             "recovery_action": "stop",
             "reason_code": "unsafe_context",
             "message": str(error),
-            "total_char_budget": error.total_char_budget,
-            "protected_char_count": error.protected_char_count,
+            "context_window_tokens": error.context_window_tokens,
+            "input_tokens": error.input_tokens,
             "current_request_char_count": len(seed.current_request),
             "current_request_byte_sha256": current_request_sha256,
             "current_request_canonical_sha256": canonical_sha256(seed.current_request),
@@ -1740,7 +1732,7 @@ class PressureUnsafeRefusalProjector:
                 model_calls=0,
                 total_tokens=0,
                 runtime_ms=0,
-                context_tokens=(artifact.protected_char_count + 3) // 4,
+                context_tokens=artifact.input_tokens,
             ),
             "script_protocol_deviations": (),
             "evidence_records": (),
@@ -1890,15 +1882,10 @@ def _direct_node_contract_preserved(
     expected: PressureNodeArtifactSeed,
 ) -> bool:
     summary = _node_summaries_by_id(snapshot).get(expected.node_id)
-    projection = _node_projections_by_id(snapshot).get(expected.node_id)
-    if summary is None or projection is None:
+    if summary is None:
         return False
     return (
-        tuple(summary.get("required_output_paths", ()))
-        == expected.required_output_paths
-        and projection.required_output_paths == expected.required_output_paths
-        and projection.source_refs == expected.source_refs
-        and projection.artifact_refs == expected.artifact_refs
+        bool(summary.get("result_ref"))
         and set(expected.source_refs) <= set(summary.get("source_refs", ()))
         and set(expected.artifact_refs) <= set(summary.get("artifact_refs", ()))
         and all(
@@ -1915,7 +1902,7 @@ def _necessary_execution_chain_completed(
     plan_summary = snapshot.envelope.working_memory.plan_summary
     if not isinstance(plan_summary, dict):
         return False
-    plan_nodes = plan_summary.get("nodes")
+    plan_nodes = plan_summary.get("节点")
     if not isinstance(plan_nodes, list):
         return False
     dependency_rows = tuple(row for row in plan_nodes if isinstance(row, dict))
@@ -1927,9 +1914,9 @@ def _necessary_execution_chain_completed(
         ):
             return False
         if not any(
-            direct.node_id in row.get("dependencies", ())
+            direct.node_id in row.get("依赖", ())
             for row in dependency_rows
-            if isinstance(row.get("dependencies", ()), (list, tuple))
+            if isinstance(row.get("依赖", ()), (list, tuple))
         ):
             return False
     return True
@@ -1938,10 +1925,8 @@ def _necessary_execution_chain_completed(
 def _projected_path_available(output_summary: Any, path: str) -> bool:
     if not isinstance(output_summary, dict):
         return False
-    if output_summary.get("_projection_status") in {"compressed", "omitted"}:
-        required = output_summary.get("_required_fields", {})
-        item = required.get(path) if isinstance(required, dict) else None
-        return isinstance(item, dict) and item.get("available") is True
+    if output_summary.get("已截断"):
+        return path.split(".")[0] in output_summary.get("内容预览", {}).get("字段", {})
     found, _ = _resolve_seed_path(output_summary, path)
     return found
 
@@ -1967,10 +1952,9 @@ def _projected_required_count(
     output_summary = summary.get("output_summary")
     if not isinstance(output_summary, dict):
         return None
-    if output_summary.get("_projection_status") in {"compressed", "omitted"}:
-        required = output_summary.get("_required_fields", {})
-        item = required.get(path) if isinstance(required, dict) else None
-        count = item.get("item_count") if isinstance(item, dict) else None
+    if output_summary.get("已截断"):
+        item = output_summary.get("内容预览", {}).get("字段", {}).get(path)
+        count = item.get("总条目数") if isinstance(item, dict) else None
         return count if isinstance(count, int) else None
     found, value = _resolve_seed_path(output_summary, path)
     return len(value) if found and isinstance(value, list) else None
@@ -1992,36 +1976,22 @@ def _resolve_seed_path(value: Any, path: str) -> tuple[bool, Any]:
 
 
 def _omission_priority_is_valid(
-    seed: PressureSeed,
-    snapshot: GeneralAgentContextSnapshot,
+    seed: PressureSeed, snapshot: GeneralAgentContextSnapshot
 ) -> bool:
     trace = snapshot.assembly_trace
-    if trace is None:
-        return False
-    layers = {item.layer: item for item in trace.layers}
-    protected_omitted = set(trace.protected_refs) & set(trace.omitted_item_refs)
-    if protected_omitted:
-        return False
-    if seed.kind is PressureKind.HISTORY:
-        return layers["history_memory"].omitted_count > 0
-    if seed.kind is PressureKind.WORKING_MEMORY:
-        return layers["working_memory"].omitted_count > 0
-    if seed.kind is PressureKind.NODE_OUTPUT:
-        direct_ids = {
-            item.node_id for item in seed.node_artifacts if item.direct_dependency
-        }
-        return all(
-            item.omitted_item_count > 0
-            for item in trace.projections
-            if item.node_id in direct_ids
-        )
-    if seed.kind is PressureKind.MULTI_SOURCE:
-        return (
-            layers["history_memory"].omitted_count > 0
-            and layers["working_memory"].omitted_count > 0
-            and bool(trace.omitted_source_refs)
-        )
-    return True
+    return trace is not None and not (
+        set(trace.protected_refs) & set(trace.omitted_item_refs)
+    )
+
+
+def _session_items(snapshot: GeneralAgentContextSnapshot) -> list[dict[str, Any]]:
+    return [
+        item
+        for items in snapshot.envelope.working_memory.session_memory.model_dump(
+            mode="json"
+        ).values()
+        for item in items.values()
+    ]
 
 
 def _expected_working_projection(seed: PressureSeed) -> dict[str, Any]:
@@ -2056,17 +2026,12 @@ def _actual_working_projection(
     seed: PressureSeed,
     snapshot: GeneralAgentContextSnapshot,
 ) -> dict[str, Any]:
-    actual_memories = snapshot.envelope.working_memory.memories
+    actual_memories = _session_items(snapshot)
     protected_memories = []
     for item in seed.working_memories:
         if not item.protected_fact_refs:
             continue
-        if any(
-            actual.kind == item.kind
-            and actual.content == item.content
-            and set(item.source_refs) <= set(actual.source_refs)
-            for actual in actual_memories
-        ):
+        if any(actual["content"] == item.content for actual in actual_memories):
             protected_memories.append(
                 {
                     "seed_id": item.seed_id,

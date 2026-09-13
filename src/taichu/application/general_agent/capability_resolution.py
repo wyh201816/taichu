@@ -25,7 +25,7 @@ from taichu.application.tools.contract import (
 from taichu.application.tools.registry import ToolRegistry
 
 _CORE_CAPABILITIES = {
-    "maintain_working_memory",
+    "read_runtime_result",
     "retrieve_story_context",
     "read_manuscript",
     "resolve_knowledge_identity",
@@ -68,9 +68,7 @@ class RuntimeCapabilityRegistry:
                     "requires_external_access": (
                         tool_manifest.requires_external_access
                     ),
-                    "authorization_policy": (
-                        tool_manifest.authorization_policy.value
-                    ),
+                    "authorization_policy": (tool_manifest.authorization_policy.value),
                 }
             )
         for subagent_manifest in self._subagents.list_manifests():
@@ -86,9 +84,7 @@ class RuntimeCapabilityRegistry:
                     "accepted_artifact_types": sorted(
                         subagent_manifest.accepted_artifact_types
                     ),
-                    "produced_artifact_types": sorted(
-                        subagent_manifest.artifact_types
-                    ),
+                    "produced_artifact_types": sorted(subagent_manifest.artifact_types),
                 }
             )
         return sorted(result, key=lambda item: (str(item["type"]), str(item["name"])))
@@ -181,9 +177,7 @@ class ToolSchemaLoader:
     def selected_native_definitions(
         self, plan: GeneralAgentExecutionPlan
     ) -> list[dict[str, Any]]:
-        return self.native_definitions(
-            [node.capability_name for node in plan.nodes]
-        )
+        return self.native_definitions([node.capability_name for node in plan.nodes])
 
     def plan_output_tool(
         self,
@@ -237,9 +231,13 @@ class ToolSchemaLoader:
                     "完整参数和输出契约会在入选后加载，不能因未预加载而省略用户目标。"
                 )
                 variant["properties"]["kind"] = {"type": "string", "enum": [kind.value]}
-                variant["properties"]["capability_name"] = {"type": "string", "enum": unloaded}
+                variant["properties"]["capability_name"] = {
+                    "type": "string",
+                    "enum": unloaded,
+                }
                 variant["properties"]["input_data"] = {
-                    "type": "object", "additionalProperties": True,
+                    "type": "object",
+                    "additionalProperties": True,
                 }
                 variants.append(variant)
         nodes["maxItems"] = max_plan_nodes
@@ -366,14 +364,22 @@ def _validate_binding_contract(
     target_contract: CapabilityContract,
 ) -> list[str]:
     errors: list[str] = []
-    target_schema = convert_to_openai_tool(target_contract.input_schema)["function"]["parameters"]
+    target_schema = convert_to_openai_tool(target_contract.input_schema)["function"][
+        "parameters"
+    ]
     targets = _schemas_at_path(target_schema, target_path.split("."))
     if not targets:
-        errors.append(f"节点 {node.node_id} 的 input_bindings 目标字段 {target_path} 不存在。")
+        errors.append(
+            f"节点 {node.node_id} 的 input_bindings 目标字段 {target_path} 不存在。"
+        )
     if source_contract.output_schema is None:
         return errors
-    source_schema = convert_to_openai_tool(source_contract.output_schema)["function"]["parameters"]
-    sources = _schemas_at_path(source_schema, source_path.removeprefix("output.").split("."))
+    source_schema = convert_to_openai_tool(source_contract.output_schema)["function"][
+        "parameters"
+    ]
+    sources = _schemas_at_path(
+        source_schema, source_path.removeprefix("output.").split(".")
+    )
     if not sources:
         allowed = sorted(source_contract.output_schema.model_fields)
         errors.append(
@@ -383,7 +389,11 @@ def _validate_binding_contract(
         )
     if errors:
         return errors
-    if not any(_binding_types_overlap(source, target) for source in sources for target in targets):
+    if not any(
+        _binding_types_overlap(source, target)
+        for source in sources
+        for target in targets
+    ):
         return [
             f"节点 {node.node_id} 的 input_bindings 类型不兼容："
             f"{source_node_id}.{source_path} 不能绑定到 {target_path}；"
@@ -395,7 +405,11 @@ def _validate_binding_contract(
 def _schemas_at_path(schema: dict[str, Any], parts: list[str]) -> list[dict[str, Any]]:
     branches = schema.get("anyOf", [])
     if branches:
-        return [resolved for branch in branches for resolved in _schemas_at_path(branch, parts)]
+        return [
+            resolved
+            for branch in branches
+            for resolved in _schemas_at_path(branch, parts)
+        ]
     if not parts:
         return [schema]
     head, *tail = parts

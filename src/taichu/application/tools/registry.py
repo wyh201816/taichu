@@ -251,9 +251,6 @@ class ToolRegistry:
                     self._context,
                 )
             output = manifest.output_schema.model_validate(raw_output)
-            output_chars = len(output.model_dump_json())
-            if output_chars > manifest.max_result_chars:
-                raise ToolInvocationError(f"工具“{name}”结果超过允许的字符预算。")
             if (
                 manifest.idempotency_policy is ToolIdempotencyPolicy.REQUIRED
                 and idempotency_key is not None

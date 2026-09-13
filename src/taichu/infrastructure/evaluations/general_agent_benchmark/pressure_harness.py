@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
+from taichu.application.general_agent.pipeline import ContextCapacityError, content_hash
 from pathlib import Path
 from typing import Mapping
 
@@ -36,10 +38,7 @@ from taichu.application.evaluations.general_agent_benchmark.suite_loader import 
     PressurePlanAssetSpec,
 )
 from taichu.application.general_agent.context import (
-    ContextAssembler,
-    ContextAssemblyError,
-    ContextCompactor,
-    GeneralAgentContextPolicy,
+    _STABLE_MEMORY,
 )
 from taichu.application.general_agent.models import (
     GeneralAgentContextSnapshot,
@@ -56,6 +55,10 @@ from taichu.application.general_agent.models import (
 from taichu.application.services.agent_memory_service import AgentMemoryService
 from taichu.infrastructure.agent_memory import (
     LangGraphAgentMemoryRepository,
+)
+
+from taichu.infrastructure.evaluations.general_agent_benchmark.context_projection import (
+    DeterministicProjectionAssembler,
 )
 
 _PRESSURE_STORES: dict[Path, InMemoryStore] = {}
@@ -174,9 +177,7 @@ def _sealed_pressure(
         ),
         invalid_sentinel_refs=invalid_refs,
         paired_case_ref=(
-            "context_baseline_pair"
-            if kind is PressureKind.EQUIVALENCE_PAIR
-            else None
+            "context_baseline_pair" if kind is PressureKind.EQUIVALENCE_PAIR else None
         ),
     )
     blob = PressureFixtureBlob.seal(
@@ -199,9 +200,7 @@ def _with_current_request(
     )
     payload["current_request"] = current_request
     payload["protected_facts"] = tuple(
-        item.model_copy(
-            update={"expected_text": current_request}
-        )
+        item.model_copy(update={"expected_text": current_request})
         if item.fact_ref == "current_request"
         else item
         for item in seed.protected_facts
@@ -312,9 +311,7 @@ def _dependency_plan(
             plan_revision=1,
             kind=GeneralAgentNodeKind.TOOL,
             capability_name=(
-                "get_novel_structure"
-                if item.direct_dependency
-                else "read_manuscript"
+                "get_novel_structure" if item.direct_dependency else "read_manuscript"
             ),
             objective=(
                 "读取下游消费所需的结构合同。"
@@ -358,71 +355,6 @@ def _run(
     )
 
 
-def _policy(kind: PressureKind, *, baseline: bool = False) -> GeneralAgentContextPolicy:
-    if baseline:
-        return GeneralAgentContextPolicy(
-            total_char_budget=90_000,
-            working_memory_char_budget=20_000,
-            history_memory_limit=10,
-            history_memory_char_budget=20_000,
-            node_summary_char_budget=40_000,
-            plan_summary_char_budget=20_000,
-            message_compaction_threshold=100,
-            node_output_compaction_threshold=100_000,
-        )
-    if kind in {
-        PressureKind.HISTORY,
-        PressureKind.WORKING_MEMORY,
-        PressureKind.NODE_OUTPUT,
-        PressureKind.MULTI_SOURCE,
-    }:
-        return GeneralAgentContextPolicy(
-            total_char_budget={
-                PressureKind.HISTORY: 8_000,
-                PressureKind.WORKING_MEMORY: 12_000,
-                PressureKind.NODE_OUTPUT: 12_000,
-                PressureKind.MULTI_SOURCE: 30_000,
-            }[kind],
-            working_memory_char_budget=7_000,
-            history_memory_limit=5,
-            history_memory_char_budget=2_400,
-            node_summary_char_budget=3_000,
-            plan_summary_char_budget=1_800,
-            message_compaction_threshold=3,
-            node_output_compaction_threshold=500,
-        )
-    if kind is PressureKind.INVALID_MEMORY:
-        return GeneralAgentContextPolicy(
-            total_char_budget=40_000,
-            working_memory_char_budget=5_000,
-            history_memory_limit=4,
-            history_memory_char_budget=2_200,
-            node_summary_char_budget=3_600,
-            plan_summary_char_budget=2_000,
-            message_compaction_threshold=2,
-            node_output_compaction_threshold=500,
-        )
-    if kind is PressureKind.CURRENT_REQUEST:
-        return GeneralAgentContextPolicy(
-            total_char_budget=30_000,
-            working_memory_char_budget=4_000,
-            history_memory_char_budget=1_000,
-            node_summary_char_budget=4_000,
-            plan_summary_char_budget=2_000,
-            node_output_compaction_threshold=500,
-        )
-    return GeneralAgentContextPolicy(
-        total_char_budget=40_000,
-        working_memory_char_budget=5_000,
-        history_memory_limit=5,
-        history_memory_char_budget=2_400,
-        node_summary_char_budget=4_000,
-        plan_summary_char_budget=2_000,
-        message_compaction_threshold=3,
-        node_output_compaction_threshold=500,
-    )
-
-
 async def _assemble_behavior_case(
     root: Path,
     seed: PressureSeed,
@@ -434,9 +366,9 @@ async def _assemble_behavior_case(
     if seed.node_artifacts:
         plan, node_runs = _dependency_plan(seed)
     return (
-        await ContextAssembler(
+        await DeterministicProjectionAssembler(
+            root=root,
             memory_service=service,
-            policy=_policy(seed.kind),
         ).assemble(
             _run(
                 seed,
@@ -460,9 +392,9 @@ async def _equivalence_result(
     baseline_service = _memory_service(root / "baseline")
     await _write_seed_memories(baseline_service, seed, protected_only=True)
     baseline_snapshot = (
-        await ContextAssembler(
+        await DeterministicProjectionAssembler(
+            root=root,
             memory_service=baseline_service,
-            policy=_policy(seed.kind, baseline=True),
         ).assemble(
             _run(
                 seed,
@@ -482,9 +414,9 @@ async def _equivalence_result(
     pressure_service = _memory_service(root / "pressure")
     await _write_seed_memories(pressure_service, seed)
     pressure_snapshot = (
-        await ContextAssembler(
+        await DeterministicProjectionAssembler(
+            root=root,
             memory_service=pressure_service,
-            policy=_policy(seed.kind),
         ).assemble(
             _run(
                 seed,
@@ -538,12 +470,6 @@ async def _equivalence_result(
     )
 
 
-class _FailingCompactor(ContextCompactor):
-    def compact(self, *args: object, **kwargs: object) -> object:
-        del args, kwargs
-        raise RuntimeError("密封压缩器故障")
-
-
 async def _invalid_memory_result(
     root: Path,
     *,
@@ -560,18 +486,16 @@ async def _invalid_memory_result(
         plan=execution_plan,
         node_runs=node_runs,
     )
-    policy = _policy(seed.kind)
     snapshot = (
-        await ContextAssembler(
+        await DeterministicProjectionAssembler(
+            root=root,
             memory_service=service,
-            policy=policy,
         ).assemble(run, phase="verify")
     ).snapshot
     fallback = (
-        await ContextAssembler(
+        await DeterministicProjectionAssembler(
+            root=root,
             memory_service=service,
-            policy=policy,
-            compactor=_FailingCompactor(),
         ).assemble(run, phase="verify")
     ).snapshot
     behavior = PressureBehaviorEvaluator().evaluate(
@@ -607,9 +531,9 @@ async def _assemble_current_request(
 ) -> GeneralAgentContextSnapshot:
     execution_plan, node_runs = _dependency_plan(seed)
     return (
-        await ContextAssembler(
+        await DeterministicProjectionAssembler(
+            root=root,
             memory_service=_memory_service(root),
-            policy=_policy(seed.kind),
         ).assemble(
             _run(seed, plan=execution_plan, node_runs=node_runs),
             phase="verify",
@@ -623,15 +547,33 @@ async def _unsafe_refusal_result(
     plan: PressurePlan,
     seed: PressureSeed,
 ) -> PressureHarnessResult:
-    assembler = ContextAssembler(
+    assembler = DeterministicProjectionAssembler(
+        root=root,
         memory_service=_memory_service(root),
-        policy=GeneralAgentContextPolicy(
-            total_char_budget=max(1, len(seed.current_request) // 2),
-        ),
     )
     try:
+        from taichu.infrastructure.llm.context_tokens import ModelContextTokens
+        from langchain_core.messages import HumanMessage
+
+        counter = ModelContextTokens(
+            windows={"pressure": max(1, len(seed.current_request) // 2)}
+        )
+        if counter.count_request(
+            [HumanMessage(content=seed.current_request)], [], "pressure"
+        ) > counter.window("pressure"):
+            raise ContextCapacityError(
+                "必要输入超过模型窗口。",
+                input_tokens=counter.count_request(
+                    [HumanMessage(content=seed.current_request)], [], "pressure"
+                ),
+                context_window_tokens=counter.window("pressure"),
+                current_request_sha256=sha256(
+                    seed.current_request.encode()
+                ).hexdigest(),
+                stable_memory_sha256=content_hash(list(_STABLE_MEMORY)),
+            )
         await assembler.assemble(_run(seed), phase="plan")
-    except ContextAssemblyError as error:
+    except ContextCapacityError as error:
         refusal = PressureUnsafeRefusalArtifact.from_error(
             plan=plan,
             seed=seed,
@@ -645,9 +587,7 @@ async def _unsafe_refusal_result(
         artifact=refusal,
     )
     return PressureHarnessResult(
-        assertion_context=AssertionEvaluationContext(
-            context_preservation=(context,)
-        ),
+        assertion_context=AssertionEvaluationContext(context_preservation=(context,)),
         behavior=None,
         unsafe_refusal=refusal,
     )

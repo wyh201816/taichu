@@ -7,7 +7,7 @@ import re
 from typing import Any, cast, TypeVar
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import InputAgentState
+from langchain.agents.middleware import InputAgentState, ModelRequest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import (
@@ -55,6 +55,13 @@ from taichu.application.services.model_role_router import ModelRoleRouter
 from taichu.application.subagents.registry import SubagentRegistry
 from taichu.application.tools.registry import ToolRegistry
 
+from taichu.application.general_agent.pipeline import (
+    ACTIVE_PIPELINE,
+    ContextPipelineMiddleware,
+    ContextCapacityError,
+    message_id,
+)
+
 _OutputModel = TypeVar("_OutputModel", bound=BaseModel)
 
 _PLAN_SYSTEM_PROMPT = """你是太初通用写作助手的高层编排 Agent，负责一次形成可执行的最小充分 DAG。
@@ -74,7 +81,7 @@ _PLAN_SYSTEM_PROMPT = """你是太初通用写作助手的高层编排 Agent，�
 11. 信息缺口会实质改变结果时才澄清；不要询问可以从小说正文或知识库取得的事实。
 12. 所有面向作者的内容使用中文。
 13. 运行记忆不是小说事实；fact_reference 只能提示你安排正文或统一召回重新取证。
-14. 只有确实出现需要跨步骤或后续请求保留的关键约束、任务主线、伏笔、阶段结论或未决事项时，才安排 maintain_working_memory；普通节点结果由 Runtime 自动沉淀，不要重复记录。
+14. 工作记忆由独立模型自动增量抽取。工具结果展示确定性预览，标为截断的结果可用 read_runtime_result 按完整引用、字段或范围回读。
 15. 完整轻量索引及候选摘要中的能力都是真实注册能力；不得创造索引中不存在的能力。参数细节只以原生 tools 参数承载的 Schema 为准。
 16. 所有位置未知的正文、知识卡、混合证据和多跳关系召回统一使用 retrieve_story_context；不要按单一事实或多跳问题选择不同检索工具。名称、别名、存在性与歧义判断使用 resolve_knowledge_identity，明确章节读取仍使用 read_manuscript。
 17. 必须通过系统指定的结构化输出 Tool 返回计划，不要在正文中手写 JSON。
@@ -99,39 +106,68 @@ _VERIFY_SYSTEM_PROMPT = """你是太初通用写作助手的高层编排 Agent�
 _PLAN_SYSTEM_PROMPT += """
 18. input_bindings 的数组下标统一使用点号，例如 chunks.0.content；方括号形式会被规范化，但不得使用其他路径语法。
 19. 重规划时不得重复执行已经成功且仍可满足目标的节点；需要把成功结果带入新修订版时，使用 reuse_from_node_id 明确引用上一修订版节点。
-20. 工作记忆不是小说事实。替代或失效旧记忆时必须使用当前上下文给出的 memory_id 与 state_sha256；不得把 stale、rejected 或 superseded 记录恢复成当前依据。
+20. 工作记忆不是小说事实；节点状态与结果有效性由 Runtime 管理，不得把失效或被替代结果恢复成当前依据。
 21. input_bindings 的 target_path 必须是下游能力输入 Schema 中的真实字段，source_path 必须是上游输出 Schema 中的真实字段；不得凭语义猜测 content、chapters 等字段名。
 22. 专业子 Agent 依赖的上游专业产物会由 Runtime 自动写入 source_request.upstream_artifact_refs，作为工作上下文；这不替代能力的必填输入。审查、修改等能力的必填正文参数仍须通过 input_bindings 从上游真实输出字段绑定，不得填产物类型或占位说明。
 """
 
 
-def _verification_audit(run: GeneralAgentRun) -> list[dict[str, Any]]:
+def _verification_audit(
+    run: GeneralAgentRun, *, preview: bool = False
+) -> list[dict[str, Any]]:
     """本轮被审对象和审查意见是验收证据，不能复用事实有效性过滤。"""
     current = [
-        node for node in run.node_runs
-        if node.plan_revision == run.plan_revision and node.status is GeneralAgentNodeStatus.SUCCESS
+        node
+        for node in run.node_runs
+        if node.plan_revision == run.plan_revision
+        and node.status is GeneralAgentNodeStatus.SUCCESS
     ]
     superseded = {
         dependency
-        for node in current if node.output.get("artifact_type") == "revision_candidate"
+        for node in current
+        if node.output.get("artifact_type") == "revision_candidate"
         for dependency in node.dependencies
     }
     audit = []
     for node in current:
-        candidate = node.output.get("artifact_type") in {"manuscript_candidate", "revision_candidate"}
+        candidate = node.output.get("artifact_type") in {
+            "manuscript_candidate",
+            "revision_candidate",
+        }
         review = "verdict" in node.output and "issues" in node.output
         if not candidate and not review:
             continue
-        audit.append({
-            "node_id": node.node_id,
-            "usage": "仅作本次验收证据，不能据此恢复为有效小说事实或有效记忆。来源标识全集保存在原始节点产物；此处保留正文、审查问题及问题内的来源引用。",
-            "deliver_candidate": candidate and node.node_id not in superseded,
-            # 各专家继承的来源标识全集高度重叠，不是验收正文；不要反复投影。
-            # 问题自带的 evidence/source_ref、警告与候选正文均完整保留。
-            "output": {key: value for key, value in node.output.items() if key != "source_refs"},
-        })
-    if len(json.dumps(audit, ensure_ascii=False)) > 40_000:
-        raise ValueError("本次候选与审查证据超过验收预算，不能省略关键证据后宣称完成。")
+        projected_result = next(
+            (
+                item
+                for item in run.context_pipeline.results.values()
+                if item.run_id == run.run_id and item.node_id == node.node_id
+            ),
+            None,
+        )
+        audit.append(
+            {
+                "node_id": node.node_id,
+                "usage": "仅作本次验收证据，不能据此恢复为有效小说事实或有效记忆。来源标识全集保存在原始节点产物；此处保留正文、审查问题及问题内的来源引用。",
+                "deliver_candidate": candidate and node.node_id not in superseded,
+                # 各专家继承的来源标识全集高度重叠，不是验收正文；不要反复投影。
+                # 问题自带的 evidence/source_ref、警告与候选正文均完整保留。
+                "output": (
+                    {
+                        "说明": "该产物已纳入全量摘要，需要原文时按引用回读。",
+                        "完整结果引用": projected_result.result_ref,
+                    }
+                    if preview and projected_result and projected_result.full_compacted
+                    else projected_result.preview
+                    if preview and projected_result
+                    else {
+                        key: value
+                        for key, value in node.output.items()
+                        if key != "source_refs"
+                    }
+                ),
+            }
+        )
     return audit
 
 
@@ -146,7 +182,6 @@ class OrchestratorAgent:
         tool_registry: ToolRegistry,
         subagent_registry: SubagentRegistry,
         trace_repository: InvocationTraceRepository | None = None,
-        capability_prompt_char_budget: int = 40_000,
         capability_retrieval_limit: int = 12,
     ) -> None:
         self._llm = llm
@@ -154,10 +189,6 @@ class OrchestratorAgent:
         self._tool_registry = tool_registry
         self._subagent_registry = subagent_registry
         self._trace_repository = trace_repository
-        self._capability_prompt_char_budget = max(
-            10_000,
-            capability_prompt_char_budget,
-        )
         self._capability_registry = RuntimeCapabilityRegistry(
             tool_registry,
             subagent_registry,
@@ -179,10 +210,6 @@ class OrchestratorAgent:
         phase = "replan" if replan_guidance else "plan"
         capability_view = self._capability_retriever.retrieve(
             " ".join([context.current_goal, replan_guidance]).strip()
-        )
-        _ensure_capability_prompt_fits(
-            capability_view,
-            char_budget=self._capability_prompt_char_budget,
         )
         chapter_orders = explicit_chapter_orders(context.current_goal)
         recent_count = recent_chapter_count(context.current_goal)
@@ -227,9 +254,10 @@ class OrchestratorAgent:
             try:
                 self._validate_capabilities(candidate, run, context=context)
                 schema_errors = self._schema_loader.validation_errors(candidate)
-                newly_selected = sorted({
-                    node.capability_name for node in candidate.nodes
-                } - set(candidate_names))
+                newly_selected = sorted(
+                    {node.capability_name for node in candidate.nodes}
+                    - set(candidate_names)
+                )
                 if newly_selected:
                     schema_errors.append(
                         "以下入选能力尚未加载完整契约，须按本次原生契约确认参数与输出绑定："
@@ -265,6 +293,38 @@ class OrchestratorAgent:
         if plan is None:
             raise OrchestratorPlanError("执行计划未通过完整能力契约校验。")
         return plan
+
+    async def compact_context(
+        self, run: GeneralAgentRun, *, context: GeneralAgentContextEnvelope
+    ) -> None:
+        capabilities = self._capability_retriever.retrieve(context.current_goal)
+        names = [str(item["name"]) for item in capabilities["相关候选摘要"]]
+        await self._complete_json(
+            run=run,
+            phase="plan",
+            phase_prompt=_PLAN_SYSTEM_PROMPT,
+            context=context,
+            phase_contract={
+                "相关能力摘要": capabilities["相关候选摘要"],
+                "相关候选数": capabilities["相关候选数"],
+                "能力检索说明": capabilities["说明"],
+            },
+            working_payload={
+                "允许外部研究": run.external_access_allowed,
+                "最大计划节点数": run.limits.max_plan_nodes,
+                "当前重规划次数": run.replan_count,
+                "已解析的明确章节顺序": explicit_chapter_orders(context.current_goal),
+            },
+            output_schema=GeneralAgentPlanDraft,
+            native_tools=self._schema_loader.native_definitions(names),
+            output_tool=self._schema_loader.plan_output_tool(
+                GeneralAgentPlanDraft,
+                names,
+                max_plan_nodes=run.limits.max_plan_nodes,
+                include_unloaded=True,
+            ),
+            compact_only=True,
+        )
 
     async def _materialize_plan(
         self,
@@ -306,7 +366,7 @@ class OrchestratorAgent:
         working_payload = {
             "计划修订号": run.plan_revision,
             "剩余重规划次数": max(0, run.limits.max_replans - run.replan_count),
-            "本次验收记录": _verification_audit(run),
+            "本次验收记录": _verification_audit(run, preview=True),
         }
         decision = await self._complete_json(
             run=run,
@@ -322,11 +382,14 @@ class OrchestratorAgent:
             decision = decision.model_copy(update={"should_replan": False})
         if decision.should_replan:
             return decision
-        return decision.model_copy(update={
-            "final_answer": compose_verified_delivery(
-                decision.final_answer, working_payload["本次验收记录"],
-            ),
-        })
+        return decision.model_copy(
+            update={
+                "final_answer": compose_verified_delivery(
+                    decision.final_answer,
+                    _verification_audit(run),
+                ),
+            }
+        )
 
     def _validate_capabilities(
         self,
@@ -424,6 +487,7 @@ class OrchestratorAgent:
         output_schema: type[_OutputModel],
         native_tools: list[dict[str, Any]],
         output_tool: dict[str, Any] | None = None,
+        compact_only: bool = False,
     ) -> _OutputModel:
         model_id = run.model_id or self._model_router.model_for("orchestrator")
         system_memory = _json_message(
@@ -486,6 +550,7 @@ class OrchestratorAgent:
                     max_output_tokens=12_000,
                     feature="general_writing_assistant",
                 ),
+                ContextPipelineMiddleware(),
                 ModelInvocationTraceMiddleware(
                     repository=self._trace_repository,
                     invocation=trace_invocation,
@@ -500,7 +565,11 @@ class OrchestratorAgent:
         last_error: Exception | None = None
         for attempt in range(2):
             working_messages = [
-                ChatMessage(role="developer", content=working_prompt),
+                ChatMessage(
+                    role="developer",
+                    content=working_prompt,
+                    additional_kwargs={"context_layer": "working_memory"},
+                ),
             ]
             if attempt:
                 working_messages.append(
@@ -515,11 +584,23 @@ class OrchestratorAgent:
                 )
             messages: list[AnyMessage] = [
                 ChatMessage(role="developer", content=long_term_prompt),
-                ChatMessage(role="developer", content=history_summary_prompt),
+                ChatMessage(
+                    role="developer",
+                    content=history_summary_prompt,
+                    additional_kwargs={"context_layer": "history_summary"},
+                ),
                 *[
-                    HumanMessage(content=message.content)
+                    HumanMessage(
+                        content=message.content,
+                        id=message_id(message),
+                        additional_kwargs={"context_layer": "history_raw"},
+                    )
                     if message.role == "user"
-                    else AIMessage(content=message.content)
+                    else AIMessage(
+                        content=message.content,
+                        id=message_id(message),
+                        additional_kwargs={"context_layer": "history_raw"},
+                    )
                     for message in context.history_memory.messages
                     if message.role in {"user", "assistant"}
                 ],
@@ -530,6 +611,24 @@ class OrchestratorAgent:
                     for response in context.current_request.human_responses
                 ],
             ]
+            if compact_only:
+                scope = ACTIVE_PIPELINE.get()
+                if scope is None:
+                    raise ValueError("手动压缩缺少主 Agent 上下文作用域。")
+                await scope.engine.before_model(
+                    scope,
+                    ModelRequest(
+                        model=self._llm,
+                        messages=messages,
+                        system_message=SystemMessage(content=system_memory),
+                        tools=[*native_tools, actual_output_tool],
+                        model_settings={
+                            "model_id": model_id,
+                            "max_output_tokens": 12_000,
+                        },
+                    ),
+                )
+                return cast(_OutputModel, None)
             try:
                 agent_input: InputAgentState = {
                     "messages": cast(Any, messages),
@@ -561,26 +660,12 @@ class OrchestratorAgent:
                 if not isinstance(output, output_schema):
                     raise OrchestratorOutputError("模型没有调用指定的结构化输出 Tool。")
                 return output
+            except ContextCapacityError:
+                raise
             except (ValidationError, ValueError, OutputParserException) as error:
                 last_error = error
         raise OrchestratorOutputError(
             f"高层编排 Agent 输出未通过结构校验：{last_error}"
-        )
-
-
-def _json_char_count(value: dict[str, Any]) -> int:
-    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
-
-
-def _ensure_capability_prompt_fits(
-    value: dict[str, Any],
-    *,
-    char_budget: int,
-) -> None:
-    actual_chars = _json_char_count(value)
-    if actual_chars > char_budget:
-        raise OrchestratorPlanError(
-            "能力检索结果或入选能力契约超过规划提示词字符预算。"
         )
 
 

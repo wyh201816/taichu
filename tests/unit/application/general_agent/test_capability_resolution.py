@@ -256,12 +256,12 @@ def test_retriever_keeps_full_light_index_without_full_schema_injection() -> Non
     assert "output_outline" not in json.dumps(candidates, ensure_ascii=False)
 
 
-def test_working_memory_control_tool_is_always_a_planning_candidate() -> None:
+def test_result_readback_tool_is_always_a_planning_candidate() -> None:
     tools = ToolRegistry(CapabilityContext(capabilities={}))
     tools.register(
         ToolPlugin(
             manifest=ToolManifest(
-                name="maintain_working_memory",
+                name="read_runtime_result",
                 description="维护跨步骤关键工作状态。",
                 input_schema=_SearchInput,
                 output_schema=_SearchOutput,
@@ -278,7 +278,7 @@ def test_working_memory_control_tool_is_always_a_planning_candidate() -> None:
         limit=4,
     ).retrieve("给第三章拟一个标题")
 
-    assert "maintain_working_memory" in {item["name"] for item in view["相关候选摘要"]}
+    assert "read_runtime_result" in {item["name"] for item in view["相关候选摘要"]}
 
 
 def test_schema_loader_only_loads_selected_contract_and_reports_bad_input() -> None:
@@ -357,35 +357,71 @@ def test_plan_tool_specializes_node_inputs_without_requiring_bound_values() -> N
 
 def test_real_read_draft_review_contract_rejects_screenshot_errors() -> None:
     from taichu.application.subagents.models import DraftingInput, DraftingOutput
-    from taichu.application.tools.models import ReadManuscriptInput, ReadManuscriptOutput
+    from taichu.application.tools.models import (
+        ReadManuscriptInput,
+        ReadManuscriptOutput,
+    )
 
     registry = _registry()
-    registry._tools.register(ToolPlugin(
-        manifest=ToolManifest(
-            name="read_manuscript", description="读取正文。",
-            input_schema=ReadManuscriptInput, output_schema=ReadManuscriptOutput,
-        ), run=_tool_run,
-    ))
-    registry._subagents.register(SubagentPlugin(
-        manifest=SubagentManifest(
-            name="drafting", label="正文初稿生成", description="生成正文候选。",
-            input_schema=DraftingInput, output_schema=DraftingOutput,
-            artifact_types=frozenset({"manuscript_candidate"}),
-            model_role="drafting", required_capabilities=frozenset(),
-        ), run=_subagent_run,
-    ))
+    registry._tools.register(
+        ToolPlugin(
+            manifest=ToolManifest(
+                name="read_manuscript",
+                description="读取正文。",
+                input_schema=ReadManuscriptInput,
+                output_schema=ReadManuscriptOutput,
+            ),
+            run=_tool_run,
+        )
+    )
+    registry._subagents.register(
+        SubagentPlugin(
+            manifest=SubagentManifest(
+                name="drafting",
+                label="正文初稿生成",
+                description="生成正文候选。",
+                input_schema=DraftingInput,
+                output_schema=DraftingOutput,
+                artifact_types=frozenset({"manuscript_candidate"}),
+                model_role="drafting",
+                required_capabilities=frozenset(),
+            ),
+            run=_subagent_run,
+        )
+    )
     loader = ToolSchemaLoader(registry)
     raw = {
         "rationale": "读取后写作并审查。",
         "nodes": [
-            {"node_id": "read", "kind": "tool", "capability_name": "read_manuscript",
-             "objective": "读取参考章节。", "input_data": {"chapter_ids": "99,100"}},
-            {"node_id": "draft", "kind": "subagent", "capability_name": "drafting",
-             "objective": "写开头。", "dependencies": ["read"],
-             "input_data": {"writing_goal": "写开头", "target_chars": 400}},
-            {"node_id": "review", "kind": "subagent", "capability_name": "consistency_reviewer",
-             "objective": "审查草稿。", "dependencies": ["draft"],
-             "input_bindings": [{"source_node_id": "draft", "source_path": "manuscript_candidate", "target_path": "text"}]},
+            {
+                "node_id": "read",
+                "kind": "tool",
+                "capability_name": "read_manuscript",
+                "objective": "读取参考章节。",
+                "input_data": {"chapter_ids": "99,100"},
+            },
+            {
+                "node_id": "draft",
+                "kind": "subagent",
+                "capability_name": "drafting",
+                "objective": "写开头。",
+                "dependencies": ["read"],
+                "input_data": {"writing_goal": "写开头", "target_chars": 400},
+            },
+            {
+                "node_id": "review",
+                "kind": "subagent",
+                "capability_name": "consistency_reviewer",
+                "objective": "审查草稿。",
+                "dependencies": ["draft"],
+                "input_bindings": [
+                    {
+                        "source_node_id": "draft",
+                        "source_path": "manuscript_candidate",
+                        "target_path": "text",
+                    }
+                ],
+            },
         ],
     }
     errors = loader.validation_errors(GeneralAgentExecutionPlan.model_validate(raw))
@@ -396,7 +432,8 @@ def test_real_read_draft_review_contract_rejects_screenshot_errors() -> None:
     assert loader.validation_errors(GeneralAgentExecutionPlan.model_validate(raw)) == []
 
     tool = loader.plan_output_tool(
-        GeneralAgentPlanDraft, ["read_manuscript", "drafting", "consistency_reviewer"],
+        GeneralAgentPlanDraft,
+        ["read_manuscript", "drafting", "consistency_reviewer"],
         max_plan_nodes=24,
     )
     variants = tool["function"]["parameters"]["properties"]["nodes"]["items"]["anyOf"]
@@ -408,70 +445,147 @@ def test_real_read_draft_review_contract_rejects_screenshot_errors() -> None:
 def test_plan_can_select_registered_capabilities_outside_loaded_candidates() -> None:
     loader = ToolSchemaLoader(_registry())
     tool = loader.plan_output_tool(
-        GeneralAgentPlanDraft, ["retrieve_story_context"],
-        max_plan_nodes=24, include_unloaded=True,
+        GeneralAgentPlanDraft,
+        ["retrieve_story_context"],
+        max_plan_nodes=24,
+        include_unloaded=True,
     )
     variants = tool["function"]["parameters"]["properties"]["nodes"]["items"]["anyOf"]
     review = next(
-        item for item in variants
+        item
+        for item in variants
         if "consistency_reviewer" in item["properties"]["capability_name"]["enum"]
     )
     assert review["properties"]["kind"]["enum"] == ["subagent"]
     assert review["properties"]["input_data"]["additionalProperties"] is True
     assert "入选后" in review["description"]
     selected = loader.plan_output_tool(
-        GeneralAgentPlanDraft, ["retrieve_story_context"], max_plan_nodes=24,
+        GeneralAgentPlanDraft,
+        ["retrieve_story_context"],
+        max_plan_nodes=24,
     )
-    selected_variants = selected["function"]["parameters"]["properties"]["nodes"]["items"]["anyOf"]
+    selected_variants = selected["function"]["parameters"]["properties"]["nodes"][
+        "items"
+    ]["anyOf"]
     assert len(selected_variants) == 1
 
 
 def test_binding_validation_checks_nested_paths_and_value_types() -> None:
-    from taichu.application.general_agent.capability_resolution import CapabilityContract, _validate_binding_contract
-    from taichu.application.general_agent.models import GeneralAgentNodeKind, GeneralAgentPlanNode
+    from taichu.application.general_agent.capability_resolution import (
+        CapabilityContract,
+        _validate_binding_contract,
+    )
+    from taichu.application.general_agent.models import (
+        GeneralAgentNodeKind,
+        GeneralAgentPlanNode,
+    )
     from taichu.application.subagents.models import DraftingInput
-    from taichu.application.tools.models import ReadManuscriptInput, ReadManuscriptOutput
+    from taichu.application.tools.models import (
+        ReadManuscriptInput,
+        ReadManuscriptOutput,
+    )
 
     source = CapabilityContract(
-        "read_manuscript", GeneralAgentNodeKind.TOOL, "读取正文", ReadManuscriptInput, ReadManuscriptOutput,
+        "read_manuscript",
+        GeneralAgentNodeKind.TOOL,
+        "读取正文",
+        ReadManuscriptInput,
+        ReadManuscriptOutput,
     )
-    target = CapabilityContract("drafting", GeneralAgentNodeKind.SUBAGENT, "草稿", DraftingInput)
-    node = GeneralAgentPlanNode(node_id="draft", kind="subagent", capability_name="drafting", objective="创作")
-    def check(path, destination):
-        return _validate_binding_contract(node, path, destination, "read", source, target)
+    target = CapabilityContract(
+        "drafting", GeneralAgentNodeKind.SUBAGENT, "草稿", DraftingInput
+    )
+    node = GeneralAgentPlanNode(
+        node_id="draft", kind="subagent", capability_name="drafting", objective="创作"
+    )
 
-    assert any("类型不兼容" in error for error in check("chunks", "source_request.direct_context"))
-    assert any("不存在" in error for error in check("chunks.0.unknown", "source_request.direct_context"))
-    assert any("不存在" in error for error in check("chunks.0.content", "source_request.unknown"))
+    def check(path, destination):
+        return _validate_binding_contract(
+            node, path, destination, "read", source, target
+        )
+
+    assert any(
+        "类型不兼容" in error
+        for error in check("chunks", "source_request.direct_context")
+    )
+    assert any(
+        "不存在" in error
+        for error in check("chunks.0.unknown", "source_request.direct_context")
+    )
+    assert any(
+        "不存在" in error
+        for error in check("chunks.0.content", "source_request.unknown")
+    )
     assert check("chunks.0.content", "source_request.direct_context") == []
     assert check("output.chunks.0.content", "source_request.direct_context") == []
 
 
-def test_verification_preserves_rejected_candidate_and_review_as_audit_evidence() -> None:
+def test_verification_preserves_rejected_candidate_and_review_as_audit_evidence() -> (
+    None
+):
     from unittest.mock import AsyncMock
-    from taichu.application.general_agent.models import GeneralAgentNodeRun, GeneralAgentVerification
+    from taichu.application.general_agent.models import (
+        GeneralAgentNodeRun,
+        GeneralAgentVerification,
+    )
 
     registry = _registry()
     orchestrator = OrchestratorAgent(
-        llm=_MaterializeChatModel(), model_router=ModelRoleRouter("planning-model"),
-        tool_registry=registry._tools, subagent_registry=registry._subagents,
+        llm=_MaterializeChatModel(),
+        model_router=ModelRoleRouter("planning-model"),
+        tool_registry=registry._tools,
+        subagent_registry=registry._subagents,
     )
     run = GeneralAgentRun(
-        run_id="general_run_20260904_000000_abcdef", task_id="task", conversation_id="conversation",
-        request_index=1, user_goal="写开头并检查。", plan_revision=1,
-        created_at="2026-09-04T00:00:00Z", updated_at="2026-09-04T00:00:00Z",
+        run_id="general_run_20260904_000000_abcdef",
+        task_id="task",
+        conversation_id="conversation",
+        request_index=1,
+        user_goal="写开头并检查。",
+        plan_revision=1,
+        created_at="2026-09-04T00:00:00Z",
+        updated_at="2026-09-04T00:00:00Z",
         started_at="2026-09-04T00:00:00Z",
         node_runs=[
-            GeneralAgentNodeRun(node_id="draft", plan_revision=1, kind="subagent", capability_name="drafting", objective="开头", status="success", output={"artifact_type": "manuscript_candidate", "text": "秦浩轩推开门。"}),
-            GeneralAgentNodeRun(node_id="review", plan_revision=1, kind="subagent", capability_name="consistency_reviewer", objective="检查", status="success", dependencies=["draft"], output={"artifact_type": "consistency_review", "verdict": "存在需要核对的冲突。", "issues": [{"severity": "major", "problem": "人物位置矛盾。"}]}),
+            GeneralAgentNodeRun(
+                node_id="draft",
+                plan_revision=1,
+                kind="subagent",
+                capability_name="drafting",
+                objective="开头",
+                status="success",
+                output={
+                    "artifact_type": "manuscript_candidate",
+                    "text": "秦浩轩推开门。",
+                },
+            ),
+            GeneralAgentNodeRun(
+                node_id="review",
+                plan_revision=1,
+                kind="subagent",
+                capability_name="consistency_reviewer",
+                objective="检查",
+                status="success",
+                dependencies=["draft"],
+                output={
+                    "artifact_type": "consistency_review",
+                    "verdict": "存在需要核对的冲突。",
+                    "issues": [{"severity": "major", "problem": "人物位置矛盾。"}],
+                },
+            ),
         ],
     )
     # 大量来源标识仍保存在原始产物中，不应在每份验收记录中重复投影。
-    run.node_runs[0].output["source_refs"] = [f"manuscript:chapter-{index}:0-3000" for index in range(2000)]
+    run.node_runs[0].output["source_refs"] = [
+        f"manuscript:chapter-{index}:0-3000" for index in range(2000)
+    ]
     # 即使事实投影没有这些节点，验收仍须看到本次生成和审查的真实记录。
-    complete = AsyncMock(return_value=GeneralAgentVerification(
-        outcome="satisfied", final_answer="人物动机与后续规划已整理。",
-    ))
+    complete = AsyncMock(
+        return_value=GeneralAgentVerification(
+            outcome="satisfied",
+            final_answer="人物动机与后续规划已整理。",
+        )
+    )
     orchestrator._complete_json = complete
     decision = asyncio.run(orchestrator.verify(run, context=None))
     assert "秦浩轩推开门。" in decision.final_answer
@@ -488,7 +602,9 @@ def test_verification_preserves_rejected_candidate_and_review_as_audit_evidence(
 
     # 请求真实修改时，仍返回重规划决定，不提前交付待修候选。
     complete.return_value = GeneralAgentVerification(
-        outcome="partial", final_answer="需要修改后重新检查。", should_replan=True,
+        outcome="partial",
+        final_answer="需要修改后重新检查。",
+        should_replan=True,
     )
     replanning = asyncio.run(orchestrator.verify(run, context=None))
     assert replanning.should_replan

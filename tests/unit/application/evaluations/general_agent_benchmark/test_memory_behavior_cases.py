@@ -289,7 +289,9 @@ def _project_message(message: BaseMessage) -> _ProjectedMessage:
         role=role,
         content=str(message.content),
         tool_calls=calls,
-        tool_call_id=(message.tool_call_id if isinstance(message, ToolMessage) else None),
+        tool_call_id=(
+            message.tool_call_id if isinstance(message, ToolMessage) else None
+        ),
         tool_name=(message.name if isinstance(message, ToolMessage) else None),
         is_error=(
             message.status == "error" if isinstance(message, ToolMessage) else False
@@ -384,6 +386,14 @@ async def _direct_answer(
     run: GeneralAgentRun,
     gateway: _MemoryAwareChatModel,
 ) -> tuple[GeneralAgentContextSnapshot, _NativeModelRequest, str]:
+    from tests.unit.application.general_agent.test_context_pipeline import engine
+    from pathlib import Path
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as root:
+        pipeline = engine(Path(root), [])
+        pipeline.memory_service = service
+        run = await pipeline.prepare(run, extract=False)
     snapshot = (
         await ContextAssembler(memory_service=service).assemble(run, phase="plan")
     ).snapshot

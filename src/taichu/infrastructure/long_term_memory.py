@@ -33,29 +33,21 @@ class MarkdownLongTermMemoryRetriever:
     async def retrieve(
         self,
         query: str,
-        *,
-        top_k: int,
-        char_budget: int,
     ) -> list[GeneralAgentContextMemory]:
-        if not self._path.is_file() or top_k <= 0 or char_budget <= 0:
+        if not self._path.is_file():
             return []
         text = await asyncio.to_thread(self._path.read_text, encoding="utf-8")
         query_terms = _terms(query)
         ranked = sorted(
-            (
-                (_score(item, query_terms), item)
-                for item in _parse_memories(text)
-            ),
+            ((_score(item, query_terms), item) for item in _parse_memories(text)),
             key=lambda pair: (-pair[0], pair[1].ordinal),
         )
         result: list[GeneralAgentContextMemory] = []
         used_chars = 0
         for score, item in ranked:
-            if score <= 0 or len(result) >= top_k:
+            if score <= 0:
                 continue
             content = f"{item.title}\n{item.content}".strip()
-            if used_chars + len(content) > char_budget:
-                continue
             digest = sha256(content.encode("utf-8")).hexdigest()
             result.append(
                 GeneralAgentContextMemory(
@@ -80,7 +72,9 @@ def _parse_memories(text: str) -> list[_MarkdownMemory]:
     matches = list(_SECTION.finditer(clean))
     result: list[_MarkdownMemory] = []
     for ordinal, match in enumerate(matches, start=1):
-        block = clean[match.end() : matches[ordinal].start() if ordinal < len(matches) else None]
+        block = clean[
+            match.end() : matches[ordinal].start() if ordinal < len(matches) else None
+        ]
         keywords: tuple[str, ...] = ()
         global_scope = False
         body: list[str] = []

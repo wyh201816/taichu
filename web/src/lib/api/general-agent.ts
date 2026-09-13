@@ -1,6 +1,7 @@
 import { API_BASE_URL, apiRequest } from "@/lib/api-client";
 import type {
   AgentMemoryListResponse,
+  ContextCompactionOperation,
   GeneralAgentConversationDeleteResponse,
   GeneralAgentConversationListResponse,
   GeneralAgentConversationResponse,
@@ -194,4 +195,11 @@ export async function listGeneralAgentLLMReplays(
   return apiRequest<GeneralAgentLLMReplayListResponse>(
     `${PREFIX}/runs/${encodeURIComponent(runId)}/llm-replays`,
   );
+}
+
+export async function requestContextCompaction(conversationId: string) {
+  return apiRequest<{ operation: ContextCompactionOperation }>(`${PREFIX}/conversations/${encodeURIComponent(conversationId)}/compact`, { method: "POST" });
+}
+export async function getContextCompactionStatus(conversationId: string) {
+  return apiRequest<{ operation: ContextCompactionOperation | null }>(`${PREFIX}/conversations/${encodeURIComponent(conversationId)}/compact`);
 }

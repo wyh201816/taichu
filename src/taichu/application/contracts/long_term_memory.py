@@ -11,7 +11,4 @@ class LongTermMemoryRetriever(Protocol):
     async def retrieve(
         self,
         query: str,
-        *,
-        top_k: int,
-        char_budget: int,
     ) -> list[GeneralAgentContextMemory]: ...

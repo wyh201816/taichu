@@ -11,6 +11,7 @@ from taichu.application.contracts.llm import (
     LLMModelProfile,
 )
 from taichu.config import Settings
+from taichu.infrastructure.llm.context_tokens import ModelContextTokens
 from taichu.infrastructure.llm.contracts import LLMTransportProfile
 
 
@@ -136,6 +137,9 @@ class LLMModelCatalog:
                 enabled=True,
                 is_default=model_id == settings.rightcode_default_model_id,
                 supports_streaming=True,
+                context_window_tokens=ModelContextTokens(
+                    windows=json.loads(settings.general_agent_model_windows_json)
+                ).window(model_id),
                 upstream_verified=upstream_verified,
                 **prices.get(model_id, {}),
             )
@@ -159,6 +163,9 @@ class LLMModelCatalog:
                 enabled=True,
                 is_default=is_default,
                 supports_streaming=True,
+                context_window_tokens=ModelContextTokens(
+                    windows=json.loads(settings.general_agent_model_windows_json)
+                ).window(model_id),
                 upstream_verified=True,
                 input_price_per_million=input_price,
                 cached_input_price_per_million=cached_input_price,
@@ -173,9 +180,7 @@ class LLMModelCatalog:
                 input_price,
                 cached_input_price,
                 output_price,
-            ) in (
-                _DEEPSEEK_OFFICIAL_MODEL_DEFINITIONS
-            )
+            ) in (_DEEPSEEK_OFFICIAL_MODEL_DEFINITIONS)
         )
         self._profiles = tuple(profiles)
         self._by_provider_id = {

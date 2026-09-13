@@ -119,19 +119,14 @@ def _authorization_observations(
     successful_effects = tuple(
         item for item in effects if item.status in {"succeeded", "reconciled"}
     )
-    request_ids = tuple(
-        dict.fromkeys(item.request_id for item in human_decisions)
-    )
+    request_ids = tuple(dict.fromkeys(item.request_id for item in human_decisions))
     grant_ids = tuple(
         dict.fromkeys(
             node.authorization_grant_id
             for source_run in runs
             for node in source_run.node_runs
             if node.authorization_grant_id is not None
-            and any(
-                decision.node_id == node.node_id
-                for decision in human_decisions
-            )
+            and any(decision.node_id == node.node_id for decision in human_decisions)
         )
     )
     decision: Literal[
@@ -154,16 +149,12 @@ def _authorization_observations(
         decision = "approved"
     requested_targets = tuple(
         dict.fromkeys(
-            scope
-            for item in human_decisions
-            for scope in item.resource_scopes
+            scope for item in human_decisions for scope in item.resource_scopes
         )
     )
     effected_targets = tuple(
         dict.fromkeys(
-            scope
-            for item in successful_effects
-            for scope in item.resource_scopes
+            scope for item in successful_effects for scope in item.resource_scopes
         )
     )
     unbound_effect_ids = tuple(
@@ -196,12 +187,8 @@ def _authorization_observations(
             decision_request_ids=request_ids,
             decision_grant_ids=grant_ids,
             unbound_effect_ids=unbound_effect_ids,
-            preview_sha256=(
-                preview_hashes[0] if len(preview_hashes) == 1 else None
-            ),
-            applied_input_sha256=(
-                apply_hashes[0] if len(apply_hashes) == 1 else None
-            ),
+            preview_sha256=(preview_hashes[0] if len(preview_hashes) == 1 else None),
+            applied_input_sha256=(apply_hashes[0] if len(apply_hashes) == 1 else None),
         ),
     )
 
@@ -242,9 +229,7 @@ def final_answer_provenance_refs(run: GeneralAgentRun) -> tuple[str, ...]:
     )
     return tuple(
         dict.fromkeys(
-            source_ref
-            for item in current_nodes
-            for source_ref in item.source_refs
+            source_ref for item in current_nodes for source_ref in item.source_refs
         )
     )
 
@@ -351,13 +336,10 @@ def _invocation_dataflow_observation(
     producers = tuple(
         item
         for item in invocations
-        if item.capability_name == assertion.producer
-        and item.output_sha256 is not None
+        if item.capability_name == assertion.producer and item.output_sha256 is not None
     )
     consumers = tuple(
-        item
-        for item in invocations
-        if item.capability_name == assertion.consumer
+        item for item in invocations if item.capability_name == assertion.consumer
     )
     if len(producers) != 1 or len(consumers) != 1:
         return None
@@ -472,7 +454,25 @@ def _final_basis_contains(
     if len(matching) != 1:
         return False
     output_summary = matching[0].get("output_summary")
-    return output_summary == producer.output
+    if output_summary == producer.output:
+        return True
+    # 截断后消费的是该次结果的预览。用不可变结果引用绑定真实输出，
+    # 不再把“模型必须收到全文”当作数据流身份成立的前提。
+    if not isinstance(output_summary, dict) or output_summary.get("已截断") is not True:
+        return False
+    source_id = f"node:{run.run_id}:{producer.plan_revision}:{producer.node_id}"
+    expected_reference = "result_" + canonical_sha256(
+        {
+            "conversation_id": run.conversation_id,
+            "source_id": source_id,
+            "output": producer.output,
+        }
+    )
+    return (
+        matching[0].get("source_id") == source_id
+        and matching[0].get("result_ref") == expected_reference
+        and output_summary.get("完整结果引用") == expected_reference
+    )
 
 
 def _producer_identity(

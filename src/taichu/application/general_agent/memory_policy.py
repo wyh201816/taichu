@@ -1,4 +1,4 @@
-"""通用 Runtime 记忆的确定性过滤、排序、去重和预算策略。"""
+"""执行有效性审计查询的确定性过滤、排序与去重，不裁剪上下文。"""
 
 from __future__ import annotations
 
@@ -29,8 +29,6 @@ _PROTECTED_KINDS = {
 class AgentMemoryPolicy:
     """可注入、可回放的记忆选择策略。"""
 
-    top_k: int = 12
-    char_budget: int = 12_000
     age_decay_days: int = 180
     minimum_relevance: float = 0.01
 
@@ -42,12 +40,8 @@ class AgentMemoryPolicy:
         entries: list[AgentMemoryEntry],
         *,
         lexical_scores: dict[str, float],
-        top_k: int | None = None,
-        char_budget: int | None = None,
         as_of: str,
     ) -> AgentMemorySelection:
-        resolved_top_k = top_k or self.top_k
-        resolved_budget = char_budget or self.char_budget
         active = _exclude_superseded(entries)
         ranked = sorted(
             active,
@@ -68,14 +62,8 @@ class AgentMemoryPolicy:
             seen_hashes.add(entry.content_sha256)
             deduplicated.append(entry)
 
-        protected = [
-            entry for entry in deduplicated if entry.kind in _PROTECTED_KINDS
-        ]
+        protected = [entry for entry in deduplicated if entry.kind in _PROTECTED_KINDS]
         protected_chars = sum(_entry_char_count(entry) for entry in protected)
-        if protected_chars > resolved_budget:
-            raise AgentMemoryBudgetError(
-                "作者硬约束和未解决问题超过运行记忆预算，不能安全截断。"
-            )
 
         selected = list(protected)
         selected_ids = {entry.memory_id for entry in selected}
@@ -84,17 +72,11 @@ class AgentMemoryPolicy:
         for entry in deduplicated:
             if entry.memory_id in selected_ids:
                 continue
-            if len(selected) >= resolved_top_k:
-                dropped_budget += 1
-                continue
             relevance = lexical_scores.get(entry.memory_id, 0.0)
             if relevance < self.minimum_relevance:
                 dropped_budget += 1
                 continue
             entry_chars = _entry_char_count(entry)
-            if selected_chars + entry_chars > resolved_budget:
-                dropped_budget += 1
-                continue
             selected.append(entry)
             selected_ids.add(entry.memory_id)
             selected_chars += entry_chars
@@ -115,8 +97,6 @@ class AgentMemoryPolicy:
             dropped_budget_count=dropped_budget,
             policy_snapshot={
                 **self.snapshot(),
-                "resolved_top_k": resolved_top_k,
-                "resolved_char_budget": resolved_budget,
                 "as_of": as_of,
             },
         )
@@ -139,10 +119,6 @@ class AgentMemoryPolicy:
             - age_penalty
         )
         return (-score, _reverse_timestamp(entry.updated_at), entry.memory_id)
-
-
-class AgentMemoryBudgetError(ValueError):
-    """不可丢失的记忆超过了固定预算。"""
 
 
 def _exclude_superseded(entries: list[AgentMemoryEntry]) -> list[AgentMemoryEntry]:

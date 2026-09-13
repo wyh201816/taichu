@@ -39,7 +39,12 @@ class ModelRoleRouter:
         return cls(default_model_id, raw)
 
     def model_for(self, role: str) -> str:
-        return self._overrides.get(role, self._default_model_id)
+        return self._overrides.get(
+            role,
+            "deepseek-v4-flash"
+            if role == "context_extractor"
+            else self._default_model_id,
+        )
 
     def configured_roles(self) -> dict[str, str]:
         return dict(self._overrides)

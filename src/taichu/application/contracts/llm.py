@@ -32,6 +32,8 @@ class LLMModelProfile:
     reasoning_output_price_per_million: Decimal | None = None
     currency: str = "CNY"
     upstream_verified: bool = False
+    context_window_tokens: int | None = None
+    token_count_method: str = "保守估算，可配置官方分词器"
 
 
 class LLMModelIdentity(BaseModel):

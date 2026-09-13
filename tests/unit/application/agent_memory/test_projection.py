@@ -219,6 +219,11 @@ def test_context_snapshot_keeps_current_and_repair_projections_separate(
             started_at=timestamp,
         )
 
+        from tests.unit.application.general_agent.test_context_pipeline import engine
+
+        pipeline = engine(tmp_path, [])
+        pipeline.memory_service = service
+        run = await pipeline.prepare(run, extract=False)
         snapshot = (
             await ContextAssembler(memory_service=service).assemble(
                 run,
@@ -227,12 +232,11 @@ def test_context_snapshot_keeps_current_and_repair_projections_separate(
         ).snapshot
         working = snapshot.envelope.working_memory
 
-        current_by_id = {item.memory_id: item for item in working.memories}
+        current_by_id = working.session_memory.workflow_state
         repair_by_id = {item.memory_id: item for item in working.invalidated_memories}
         assert active.memory_id in current_by_id
         assert stale.memory_id not in current_by_id
-        assert current_by_id[active.memory_id].projection_role == "basis"
-        assert current_by_id[active.memory_id].repair_only is False
+        assert current_by_id[active.memory_id].source_ids == [active.memory_id]
         assert stale.memory_id in repair_by_id
         assert repair_by_id[stale.memory_id].projection_role == "repair_source"
         assert repair_by_id[stale.memory_id].repair_only is True

@@ -2979,6 +2979,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pymongo" },
     { name = "python-dotenv" },
+    { name = "tokenizers" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "vector-graph-rag" },
 ]
@@ -3003,6 +3004,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.7" },
     { name = "pymongo", specifier = ">=4.13,<5" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "tokenizers" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
     { name = "vector-graph-rag", specifier = "==0.2.2" },
 ]

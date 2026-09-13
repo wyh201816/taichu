@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-import json
 from pathlib import Path
-from typing import Any, Never, TypeVar
+from typing import TypeVar
 
-import pytest
 
 from taichu.application.agent_memory.models import (
     AgentMemoryDependency,
@@ -22,9 +20,6 @@ from taichu.application.agent_memory.models import (
 )
 from taichu.application.general_agent.context import (
     ContextAssembler,
-    ContextAssemblyError,
-    ContextCompactor,
-    GeneralAgentContextPolicy,
 )
 from taichu.application.general_agent.models import (
     GeneralAgentMessage,
@@ -42,7 +37,6 @@ from taichu.application.general_agent.request_analysis import (
 from taichu.application.general_agent.service import _chapter_source_quality_issues
 from taichu.application.services.agent_memory_service import (
     AgentMemoryService,
-    _summarize_output,
 )
 from tests.fakes.agent_memory import in_memory_agent_memory_repository
 from taichu.infrastructure.long_term_memory import MarkdownLongTermMemoryRetriever
@@ -52,22 +46,6 @@ _ResultT = TypeVar("_ResultT")
 
 def _run(awaitable: Coroutine[object, object, _ResultT]) -> _ResultT:
     return asyncio.run(awaitable)
-
-
-def test_node_output_memory_summary_is_human_readable() -> None:
-    summary = _summarize_output(
-        {
-            "lifecycle": "draft",
-            "artifact_type": "narrative_summary",
-            "summary": "秦浩轩完成引气。",
-            "key_events": ["进入太初教", "首次引气成功"],
-            "source_refs": ["internal-ref"],
-        }
-    )
-    assert summary == "摘要：秦浩轩完成引气。；关键事件：进入太初教；首次引气成功"
-    assert "{" not in summary
-    assert "draft" not in summary
-    assert "narrative_summary" not in summary
 
 
 def test_memory_is_automatic_isolated_relevant_and_request_expiring(
@@ -102,8 +80,6 @@ def test_memory_is_automatic_isolated_relevant_and_request_expiring(
             conversation_id="conversation_a",
             current_request_index=2,
             query_text="第六章冲突采用什么叙事视角",
-            top_k=10,
-            char_budget=2_000,
         )
         first = await service.retrieve(query)
         second = await service.retrieve(query)
@@ -341,8 +317,14 @@ def test_revision_supersedes_rejected_draft_without_invalidating_revision(
             by_result_type["revision_candidate"].supersedes_memory_id
             == by_result_type["manuscript_candidate"].memory_id
         )
-        context = await ContextAssembler(memory_service=service).assemble(
+        from tests.unit.application.general_agent.test_context_pipeline import engine
+
+        projected = await engine(tmp_path, []).prepare(
             run.model_copy(update={"node_runs": [draft, review, revision]}),
+            extract=False,
+        )
+        context = await ContextAssembler(memory_service=service).assemble(
+            projected,
             phase="verify",
         )
         assert [
@@ -455,98 +437,6 @@ def test_changed_evidence_marks_memory_and_basis_dependents_stale(
     _run(scenario())
 
 
-def test_five_layers_trim_in_fixed_order_and_keep_current_request_complete(
-    tmp_path: Path,
-) -> None:
-    async def scenario() -> None:
-        service = _memory_service(tmp_path)
-        for index in range(12):
-            await _write(
-                service,
-                conversation_id="conversation_long",
-                kind=AgentMemoryKind.RESOURCE_SUMMARY,
-                content=f"资源 {index} 摘要：" + "章节线索" * 80,
-                request_index=1,
-                expires_after_request_index=8,
-            )
-        run = _long_run(round_count=30)
-        policy = GeneralAgentContextPolicy(
-            total_char_budget=18_000,
-            working_memory_retrieval_top_k=12,
-            working_memory_char_budget=8_000,
-            long_term_memory_char_budget=8_000,
-            history_memory_limit=10,
-            history_memory_char_budget=5_000,
-            node_summary_char_budget=4_000,
-            plan_summary_char_budget=3_000,
-            message_compaction_threshold=8,
-            node_output_compaction_threshold=1_000,
-        )
-        result = await ContextAssembler(
-            memory_service=service,
-            policy=policy,
-        ).assemble(run, phase="verify")
-        envelope = result.snapshot.envelope
-
-        assert envelope.total_char_count <= policy.total_char_budget
-        assert envelope.current_request.content == run.user_goal
-        assert (
-            envelope.current_request.scope["direct_context"] == run.scope.direct_context
-        )
-        assert envelope.current_request.user_constraints == run.author_constraints
-        assert envelope.stable_memory
-        assert envelope.long_term_memory == []
-        assert all(
-            item.role in {"user", "assistant"}
-            for item in envelope.history_memory.messages
-        )
-        assert all(
-            item.content != run.user_goal for item in envelope.history_memory.messages
-        )
-        assert envelope.history_memory.omitted_message_count > 0
-        assert envelope.history_memory.summary
-        assert envelope.digest is not None
-        assert [item.category for item in envelope.category_stats] == [
-            "stable_memory",
-            "working_memory",
-            "long_term_memory",
-            "history_memory",
-            "current_request",
-        ]
-        assert envelope.category_stats[-1].omitted_count == 0
-
-        checkpointed = run.model_copy(
-            update={
-                "context_snapshot_id": result.snapshot.snapshot_id,
-                "context_snapshot": result.snapshot,
-            }
-        )
-        repeated = await ContextAssembler(
-            memory_service=service,
-            policy=policy,
-        ).assemble(checkpointed, phase="verify")
-        assert repeated.reused_snapshot is True
-
-    _run(scenario())
-
-
-def test_current_request_is_rejected_instead_of_truncated(tmp_path: Path) -> None:
-    run = _long_run(round_count=2).model_copy(
-        update={
-            "scope": GeneralAgentScope(
-                scope_type="selection",
-                selection_text="完整选区" * 2_000,
-            )
-        }
-    )
-    assembler = ContextAssembler(
-        memory_service=_memory_service(tmp_path),
-        policy=GeneralAgentContextPolicy(total_char_budget=2_000),
-    )
-    with pytest.raises(ContextAssemblyError, match="不会截断这两层"):
-        _run(assembler.assemble(run, phase="plan"))
-
-
 def test_current_request_keeps_original_whitespace(tmp_path: Path) -> None:
     run = _long_run(round_count=2).model_copy(
         update={"user_goal": "  保留首尾空格和换行\n"}
@@ -558,130 +448,6 @@ def test_current_request_keeps_original_whitespace(tmp_path: Path) -> None:
         )
     )
     assert result.snapshot.envelope.current_request.content == run.user_goal
-
-
-def test_node_output_within_budget_is_not_arbitrarily_truncated(
-    tmp_path: Path,
-) -> None:
-    volumes = [
-        {
-            "volume_id": f"volume_{volume_order}",
-            "title": f"第{volume_order}卷",
-            "order": volume_order,
-            "chapters": [
-                {
-                    "chapter_id": f"chapter_{volume_order}_{chapter_order}",
-                    "title": f"第{chapter_order}章",
-                    "order": chapter_order,
-                    "word_count": 4_000,
-                    "status": "active",
-                    "markdown_path": (
-                        f"manuscripts/volume_{volume_order}/chapter_{chapter_order}.md"
-                    ),
-                }
-                for chapter_order in range(1, 26)
-            ],
-        }
-        for volume_order in range(1, 5)
-    ]
-    output = {
-        "current_volume_id": "volume_4",
-        "current_chapter_id": "chapter_4_25",
-        "total_chapters": 100,
-        "returned_chapters": 100,
-        "volumes": volumes,
-    }
-    run = _long_run(round_count=2).model_copy(
-        update={
-            "user_goal": "查看整部小说的卷章结构",
-            "node_runs": [
-                GeneralAgentNodeRun(
-                    node_id="fetch_structure",
-                    plan_revision=1,
-                    kind=GeneralAgentNodeKind.TOOL,
-                    capability_name="get_novel_structure",
-                    objective="获取整部小说的卷章结构。",
-                    status=GeneralAgentNodeStatus.SUCCESS,
-                    output=output,
-                    source_refs=["manuscript:manifest", "manuscript:outline"],
-                )
-            ],
-        }
-    )
-    result = _run(
-        ContextAssembler(
-            memory_service=_memory_service(tmp_path),
-            policy=GeneralAgentContextPolicy(node_summary_char_budget=32_000),
-        ).assemble(run, phase="verify")
-    )
-
-    summary = result.snapshot.envelope.working_memory.node_summaries[0]
-    assert summary["output_summary"] == output
-    assert len(summary["output_summary"]["volumes"]) == 4
-    assert summary["output_summary"]["volumes"][-1]["title"] == "第4卷"
-
-
-def test_oversized_node_output_uses_valid_structural_projection(
-    tmp_path: Path,
-) -> None:
-    output = {
-        "total_chapters": 100,
-        "volumes": [
-            {
-                "title": f"第{volume_order}卷",
-                "order": volume_order,
-                "chapters": [
-                    {"title": f"第{chapter_order}章", "content": "正文" * 500}
-                    for chapter_order in range(1, 26)
-                ],
-            }
-            for volume_order in range(1, 5)
-        ],
-    }
-    run = _long_run(round_count=2).model_copy(
-        update={
-            "node_runs": [
-                GeneralAgentNodeRun(
-                    node_id="fetch_structure",
-                    plan_revision=1,
-                    kind=GeneralAgentNodeKind.TOOL,
-                    capability_name="get_novel_structure",
-                    objective="获取整部小说的卷章结构。",
-                    status=GeneralAgentNodeStatus.SUCCESS,
-                    output=output,
-                )
-            ]
-        }
-    )
-    result = _run(
-        ContextAssembler(
-            memory_service=_memory_service(tmp_path),
-            policy=GeneralAgentContextPolicy(node_summary_char_budget=4_000),
-        ).assemble(run, phase="verify")
-    )
-
-    projection = result.snapshot.envelope.working_memory.node_summaries[0][
-        "output_summary"
-    ]
-    assert projection["_projection_status"] == "compressed"
-    assert projection["fields"]["volumes"]["item_count"] == 4
-    assert projection["fields"]["volumes"]["items"][-1]["title"] == "第4卷"
-    assert "正文正文正文" not in json.dumps(projection, ensure_ascii=False)
-
-
-def test_compaction_failure_uses_safe_nonempty_digest(tmp_path: Path) -> None:
-    assembler = ContextAssembler(
-        memory_service=_memory_service(tmp_path),
-        policy=GeneralAgentContextPolicy(
-            total_char_budget=20_000,
-            message_compaction_threshold=1,
-        ),
-        compactor=_FailingCompactor(),
-    )
-    result = _run(assembler.assemble(_long_run(round_count=10), phase="plan"))
-    assert result.snapshot.envelope.fallback_used is True
-    assert result.snapshot.envelope.digest is not None
-    assert result.snapshot.envelope.digest.omitted_counts
 
 
 def test_legacy_run_groups_by_task_id_and_derives_request_index() -> None:
@@ -741,12 +507,6 @@ def _memory_service(root: Path) -> AgentMemoryService:
     return AgentMemoryService(
         repository=in_memory_agent_memory_repository(root),
     )
-
-
-class _FailingCompactor(ContextCompactor):
-    def compact(self, *args: Any, **kwargs: Any) -> Never:
-        del args, kwargs
-        raise RuntimeError("模拟压缩器失败")
 
 
 class _MutableEvidenceResolver:

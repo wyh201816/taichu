@@ -82,7 +82,6 @@ from taichu.application.evaluations.general_agent_benchmark.synthetic_suite impo
 from taichu.application.external_research.service import ExternalResearchService
 from taichu.application.general_agent.context import (
     ContextAssembler,
-    GeneralAgentContextPolicy,
 )
 from taichu.application.general_agent.events import GeneralAgentEventCenter
 from taichu.application.general_agent.models import (
@@ -914,6 +913,7 @@ class SyntheticFixtureRuntime:
             memory_service=memory_service,
             context_assembler=_runtime_context_assembler(
                 case,
+                workspace=workspace,
                 fixture=self._declared_fixture,
                 memory_service=memory_service,
             ),
@@ -1027,6 +1027,7 @@ class SyntheticFixtureRuntime:
             memory_service=reloaded_memory_service,
             context_assembler=_runtime_context_assembler(
                 environment["case"],
+                workspace=workspace,
                 fixture=self._declared_fixture,
                 memory_service=reloaded_memory_service,
             ),
@@ -1347,6 +1348,7 @@ def _unsafe_context_failure_artifact(
 def _runtime_context_assembler(
     case: AuthoredCaseSpec,
     *,
+    workspace: Path,
     fixture: Any,
     memory_service: AgentMemoryService,
 ) -> ContextAssembler:
@@ -1359,13 +1361,16 @@ def _runtime_context_assembler(
         ),
         None,
     )
-    if pressure_asset is None or pressure_asset.carrier != "unsafe_total":
-        return ContextAssembler(memory_service=memory_service)
-    return ContextAssembler(
+    from taichu.infrastructure.evaluations.general_agent_benchmark.context_projection import (
+        DeterministicProjectionAssembler,
+    )
+
+    return DeterministicProjectionAssembler(
+        root=workspace,
         memory_service=memory_service,
-        policy=GeneralAgentContextPolicy(
-            total_char_budget=max(1, len(case.user_request_raw) // 2),
-        ),
+        context_window_tokens=max(1, len(case.user_request_raw) // 2)
+        if pressure_asset is not None and pressure_asset.carrier == "unsafe_total"
+        else None,
     )
 
 

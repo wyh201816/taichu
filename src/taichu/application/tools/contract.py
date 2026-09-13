@@ -83,7 +83,6 @@ class ToolManifest(BaseModel):
     authorization_policy: ToolAuthorizationPolicy = ToolAuthorizationPolicy.NONE
     idempotency_policy: ToolIdempotencyPolicy = ToolIdempotencyPolicy.NONE
     default_timeout_seconds: float = Field(default=30, gt=0, le=600)
-    max_result_chars: int = Field(default=50_000, ge=100, le=500_000)
     retryable: bool = False
 
 

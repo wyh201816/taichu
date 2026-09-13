@@ -80,20 +80,11 @@ class Settings(BaseSettings):
     reranker_model_id: str = "BAAI/bge-reranker-v2-m3"
     reranker_request_timeout_seconds: float = 180
 
-    general_agent_working_memory_retrieval_top_k: int = 12
-    general_agent_working_memory_char_budget: int = 24_000
-    general_agent_long_term_memory_retrieval_top_k: int = 8
-    general_agent_long_term_memory_char_budget: int = 12_000
     general_agent_memory_age_decay_days: int = 30
     general_agent_memory_minimum_relevance: float = 0.01
-    general_agent_context_char_budget: int = 180_000
-    general_agent_history_memory_limit: int = 10
-    general_agent_history_memory_char_budget: int = 24_000
-    general_agent_node_summary_char_budget: int = 32_000
-    general_agent_plan_summary_char_budget: int = 24_000
-    general_agent_message_compaction_threshold: int = 20
-    general_agent_node_output_compaction_threshold: int = 48_000
-    general_agent_capability_prompt_char_budget: int = 40_000
+    general_agent_result_preview_tokens: int = 4_000
+    general_agent_model_windows_json: str = "{}"
+    general_agent_tokenizers_json: str = "{}"
     general_agent_capability_retrieval_limit: int = 12
 
     mongodb_home: Path | None = None

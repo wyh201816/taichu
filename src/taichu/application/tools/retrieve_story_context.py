@@ -27,7 +27,6 @@ manifest = ToolManifest(
     exposures=frozenset({"agent_runtime"}),
     allowed_callers=INTERNAL_READ_CALLERS,
     default_timeout_seconds=120,
-    max_result_chars=100_000,
     retryable=True,
 )
 

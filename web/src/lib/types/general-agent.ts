@@ -218,7 +218,7 @@ export type GeneralAgentContextSnapshot = {
       node_summaries: Array<Record<string, unknown>>;
       unresolved_issues: string[];
       replan_guidance: string;
-      digest?: Record<string, unknown> | null;
+      session_memory?: SessionWorkingMemory;
     };
     long_term_memory: GeneralAgentContextMemory[];
     history_memory: {
@@ -247,6 +247,9 @@ export type GeneralAgentContextSnapshot = {
     }>;
     total_char_count: number;
     estimated_token_count: number;
+    context_window_tokens?: number;
+    token_count_method?: string;
+    pipeline_events?: ContextPipelineEvent[];
     compressed: boolean;
     fallback_used: boolean;
   };
@@ -254,6 +257,7 @@ export type GeneralAgentContextSnapshot = {
 };
 
 export type GeneralAgentRun = {
+  context_pipeline?: { working_memory: SessionWorkingMemory; events: ContextPipelineEvent[] };
   run_id: string;
   task_id: string;
   conversation_id: string;
@@ -544,3 +548,15 @@ export type GeneralAgentRecoverySnapshot = {
 export type GeneralAgentRecoveryResponse = {
   recovery: GeneralAgentRecoverySnapshot;
 };
+
+export interface SessionMemoryItem { content: string; source_ids: string[] }
+export type SessionWorkingMemory = Record<"task_goal" | "file_list" | "workflow_state" | "error_knowledge" | "constraints", Record<string, SessionMemoryItem>>;
+export interface ContextPipelineEvent {
+  event_id: string; stage: "truncate" | "clear" | "extract" | "fold" | "full";
+  reason: string; status: "completed" | "failed" | "skipped"; created_at: string;
+  before_tokens: number; after_tokens: number; source_ids: string[]; detail: string;
+}
+export interface ContextCompactionOperation {
+  request_id: string; conversation_id: string;
+  status: "queued" | "running" | "completed" | "failed"; message: string;
+}

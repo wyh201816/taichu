@@ -266,6 +266,52 @@ def test_final_answer_consumption_requires_matching_basis_and_verify_projection(
     assert not missing_context.dataflow_identities
 
 
+def test_truncated_result_identity_requires_the_same_immutable_reference() -> None:
+    from taichu.application.general_agent.context import create_snapshot
+    from taichu.application.evaluations.general_agent_benchmark.canonical import (
+        canonical_sha256,
+    )
+
+    case = _case("single_manuscript_search")
+    producer = _node(
+        node_id="search_fixture",
+        capability_name="retrieve_story_context",
+        output={"evidences": [{"content": "原始正文" * 1000}]},
+    )
+    run = _run(case, nodes=[producer])
+    source = f"node:{run.run_id}:{producer.plan_revision}:{producer.node_id}"
+    reference = "result_" + canonical_sha256(
+        {
+            "conversation_id": run.conversation_id,
+            "source_id": source,
+            "output": producer.output,
+        }
+    )
+    original = run.context_snapshot.envelope
+    for correct in (True, False):
+        row = {
+            "node_id": producer.node_id,
+            "source_id": source,
+            "result_ref": reference,
+            "output_summary": {
+                "已截断": True,
+                "完整结果引用": reference if correct else "result_" + "0" * 64,
+            },
+        }
+        envelope = original.model_copy(
+            update={
+                "working_memory": original.working_memory.model_copy(
+                    update={"node_summaries": [row]}
+                )
+            }
+        )
+        projected = run.model_copy(
+            update={"context_snapshot": create_snapshot(run, envelope)}
+        )
+        observed = build_runtime_assertion_context(case=case, run=projected)
+        assert bool(observed.dataflow_identities) is correct
+
+
 def test_nested_tool_to_subagent_source_flow_uses_real_invocation_refs() -> None:
     case = _case("external_research_grounded")
     shared_ref = "https://fixture.invalid/fixture_source_lighthouse_archive"
@@ -308,12 +354,14 @@ def test_nested_tool_to_subagent_source_flow_uses_real_invocation_refs() -> None
         (item.producer, item.consumer): item for item in context.dataflow_identities
     }
 
-    assert by_edge[
-        ("search_external_sources", "read_external_source")
-    ].producer_identity == shared_ref
-    assert by_edge[
-        ("read_external_source", "external_research")
-    ].consumer_identity == shared_ref
+    assert (
+        by_edge[("search_external_sources", "read_external_source")].producer_identity
+        == shared_ref
+    )
+    assert (
+        by_edge[("read_external_source", "external_research")].consumer_identity
+        == shared_ref
+    )
 
 
 def test_nested_source_flow_is_absent_when_consumer_did_not_retain_source() -> None:
@@ -431,9 +479,7 @@ def _invocation(
         call_id=call_id,
         sequence=sequence,
         parent_call_id=parent_call_id,
-        capability_kind=(
-            "subagent" if name == "external_research" else "tool"
-        ),
+        capability_kind=("subagent" if name == "external_research" else "tool"),
         capability_name=name,
         status="completed",
         input_sha256="1" * 64,

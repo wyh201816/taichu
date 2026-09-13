@@ -112,6 +112,9 @@ class DynamicDagExecutor:
         self._effect_repository = effect_repository
         self._fault_hook = fault_hook
         self._memory_validity_provider = memory_validity_provider
+        self._context_boundary: (
+            Callable[[GeneralAgentRun], Awaitable[GeneralAgentRun]] | None
+        ) = None
 
     @property
     def capability_result_repository(
@@ -132,6 +135,11 @@ class DynamicDagExecutor:
         provider: ProducerMemoryValidityProvider,
     ) -> None:
         self._memory_validity_provider = provider
+
+    def bind_context_boundary(
+        self, callback: Callable[[GeneralAgentRun], Awaitable[GeneralAgentRun]]
+    ) -> None:
+        self._context_boundary = callback
 
     async def execute(
         self,
@@ -405,6 +413,8 @@ class DynamicDagExecutor:
         checkpoint: RunProjectionCallback,
     ) -> dict[str, Any]:
         run = self._run_from_graph_state(state)
+        if self._context_boundary is not None:
+            run = await self._context_boundary(run)
         if run.plan is None:
             raise DynamicDagExecutionError("通用 Runtime 没有可执行计划。")
         plan_nodes = {node.node_id: node for node in run.plan.nodes}
@@ -1257,9 +1267,9 @@ class DynamicDagExecutor:
                 memory.model_dump(mode="json")
                 for memory in context_envelope.runtime_memories
             ]
-            digest = context_envelope.working_memory.digest
-            if digest is not None:
-                invocation_scope["context_digest"] = digest.model_dump(mode="json")
+            invocation_scope["session_memory"] = (
+                context_envelope.working_memory.session_memory.model_dump(mode="json")
+            )
         return InvocationContext(
             task_id=run.task_id,
             run_id=run.run_id,
@@ -1369,10 +1379,7 @@ class DynamicDagExecutor:
                     source_request["direct_source_refs"] = list(
                         dict.fromkeys([*existing_refs, *tool_source_refs])
                     )[:100]
-                if (
-                    (artifact_refs or tool_contexts)
-                    and not auto_collect_declared
-                ):
+                if (artifact_refs or tool_contexts) and not auto_collect_declared:
                     source_request["auto_collect"] = False
         if node.kind is GeneralAgentNodeKind.TOOL:
             tool_manifest = self._tool_registry.get_manifest(node.capability_name)

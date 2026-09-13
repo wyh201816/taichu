@@ -22,6 +22,7 @@ def test_main_enables_source_only_hot_reload_by_default() -> None:
         port=8000,
         reload=True,
         reload_dirs=[str(Path(__file__).parents[2] / "src" / "taichu")],
+        timeout_graceful_shutdown=5,
     )
 
 
@@ -40,4 +41,5 @@ def test_main_can_disable_hot_reload_explicitly() -> None:
         port=8000,
         reload=False,
         reload_dirs=None,
+        timeout_graceful_shutdown=None,
     )
