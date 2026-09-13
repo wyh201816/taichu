@@ -24,7 +24,6 @@
 | 查看当前真实 LangGraph 图、节点、边与状态转移 | `docs/学习资料/8-24当前LangGraph图节点边与状态转移报告.md` |
 | 查看当前模型请求中系统提示词（System Prompt）、工具、会话、约束的生成、编码与多轮更新链路 | `docs/学习资料/8-24模型请求上下文生成编码与多轮更新真实链路.md` |
 | 查看通用写作智能体当前 37 条固定评测基准 | `tests/fixtures/evaluations/general_writing_agent_benchmark/suite.json` |
-| 查看 18 条多步骤与 8 条异常恢复如何形成 Opik Dataset、Experiment、评分、Trace 和前端结果 | `docs/学习资料/9-01通用写作智能体Opik评测完整链路.md` |
 | 查看 Opik 的 Dataset、Experiment、Trace 页面入口与具体使用方法 | `docs/学习资料/9-01Opik评测页面查看与使用指南.md` |
 | 查看通用 Agent 后续阶段任务包 | `docs/任务包/太初-通用Agent后续推进任务包-20260717/` |
 | 查看独立代码与架构审查报告 | `docs/reviews/` |

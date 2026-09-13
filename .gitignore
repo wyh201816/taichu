@@ -32,3 +32,17 @@ project_assets/generated/*
 .vscode/
 *.swp
 *.swo
+
+# 本地个人资料与清理备份，仅保留在本机
+/.agents/skills/taichu-project-interviewer/
+/DSH_Trajectory_Design_Learning_Report_CN.md
+/docs/学习资料/9-01通用写作智能体Opik评测完整链路.md
+/docs/学习资料/9-05动态任务编排与十八条多步骤评测详解.md
+/docs/学习资料/9-05运行追踪与八条故障恢复评测详解.md
+/docs/学习资料/写作参考/7-10Pico Runtime主循环.md
+/docs/学习资料/写作参考/7-10Pico上下文瘦身.md
+/docs/旧历史/7-28通用写作智能体全模型评测与审计重构报告.md
+/docs/**/*面试*
+/docs/**/*简历*
+/docs/**/*求职*
+/output/repository-cleanup/

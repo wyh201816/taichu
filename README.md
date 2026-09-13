@@ -204,7 +204,7 @@ AI 候选经过结构、来源、冲突与生命周期校验，再由作者确�
 
 ![代码结构](./assets/code-structure.gif)
 
-项目级 Skills 位于 `.agents/skills/`，日常开发入口见[开发态索引](./.agents/索引.md)，客户端与多 Agent 协作配置位于 [.codex/config.toml](./.codex/config.toml)；[太初项目面试官](./.agents/skills/taichu-project-interviewer/SKILL.md)用于技术模拟面试、项目讲解陪练和简历技术深度评估。
+项目级 Skills 位于 `.agents/skills/`，日常开发入口见[开发态索引](./.agents/索引.md)，客户端与多 Agent 协作配置位于 [.codex/config.toml](./.codex/config.toml)。
 
 ## 工程证据
 

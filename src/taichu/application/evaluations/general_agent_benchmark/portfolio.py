@@ -186,7 +186,7 @@ _RECOVERY_CATEGORIES = (
 def build_benchmark_portfolio(
     suite: AuthoredSuiteSpec,
 ) -> tuple[BenchmarkPortfolioEntry, ...]:
-    """从权威 Suite 校验并投影两个面试可解释的评测入口。"""
+    """从权威 Suite 校验并投影两个具有可追溯证据的评测入口。"""
 
     entries = (
         _entry(
