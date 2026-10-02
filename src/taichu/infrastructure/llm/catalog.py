@@ -41,12 +41,12 @@ _MODEL_DEFINITIONS: tuple[tuple[str, str, str, str, str, bool], ...] = (
         True,
     ),
     (
-        "deepseek-v4-flash",
-        "DeepSeek V4 Flash",
-        "deepseek-v4-flash",
+        "deepseek-flash",
+        "DeepSeek V4.1 Flash",
+        "deepseek-flash",
         "anthropic_messages",
         "RIGHTCODE_DEEPSEEK_ANTHROPIC_BASE_URL",
-        True,
+        False,
     ),
     (
         "deepseek-v4-pro",
@@ -101,14 +101,14 @@ _MODEL_DEFINITIONS: tuple[tuple[str, str, str, str, str, bool], ...] = (
 _DEEPSEEK_OFFICIAL_MODEL_DEFINITIONS: tuple[
     tuple[str, str, bool, Decimal, Decimal, Decimal], ...
 ] = (
-    # DeepSeek 官方高峰时段公开价，单位为人民币/百万 Token。
+    # DeepSeek 官方高峰时段公开价，每百万 Token；币种随模型配置。
     (
-        "deepseek-v4-flash",
-        "DeepSeek V4 Flash",
+        "deepseek-flash",
+        "DeepSeek V4.1 Flash",
         True,
-        Decimal("3.0"),
-        Decimal("0.10"),
-        Decimal("9.0"),
+        Decimal("0.3"),
+        Decimal("0.006"),
+        Decimal("1.2"),
     ),
     (
         "deepseek-v4-pro",
@@ -171,7 +171,7 @@ class LLMModelCatalog:
                 cached_input_price_per_million=cached_input_price,
                 output_price_per_million=output_price,
                 reasoning_output_price_per_million=output_price,
-                currency="CNY",
+                currency="USD" if model_id == "deepseek-flash" else "CNY",
             )
             for (
                 model_id,

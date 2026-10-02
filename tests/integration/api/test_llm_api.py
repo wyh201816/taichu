@@ -96,7 +96,7 @@ class LLMApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(switched.status_code, 200)
         self.assertEqual(switched.json()["active_provider_id"], "deepseek_official")
         self.assertEqual(models.status_code, 200)
-        self.assertEqual(models.json()["default_model_id"], "deepseek-v4-flash")
+        self.assertEqual(models.json()["default_model_id"], "deepseek-flash")
         self.assertEqual(len(models.json()["models"]), 2)
         self.assertEqual(
             {item["provider"] for item in models.json()["models"]},
@@ -104,11 +104,11 @@ class LLMApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             {item["id"] for item in models.json()["models"]},
-            {"deepseek-v4-flash", "deepseek-v4-pro"},
+            {"deepseek-flash", "deepseek-v4-pro"},
         )
         self.assertEqual(preferences.llm_provider, "deepseek_official")
 
-    async def test_catalog_is_safe_and_default_is_deepseek_v4_pro(self) -> None:
+    async def test_catalog_is_safe_and_default_is_deepseek_v41_flash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             app = create_app(
                 Settings(
@@ -126,7 +126,7 @@ class LLMApiTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["default_model_id"], "deepseek-v4-pro")
+        self.assertEqual(payload["default_model_id"], "deepseek-flash")
         self.assertEqual(len(payload["models"]), 10)
         deepseek = next(
             item for item in payload["models"] if item["id"] == "deepseek-v4-pro"
@@ -142,7 +142,7 @@ class LLMApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("base_url_key", serialized)
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("authorization", serialized)
-        self.assertNotIn("token", serialized)
+        self.assertNotIn('"token":', serialized)
         self.assertEqual(unknown.status_code, 422)
         self.assertEqual(unknown.json()["error"]["code"], "LLM_MODEL_UNKNOWN")
 

@@ -17,6 +17,7 @@ dependencies = [
     "langgraph-checkpoint-mongodb>=0.4.0",
     "langgraph-store-mongodb>=0.1.0",
     "tokenizers",
+    "zstandard>=0.25,<1",
 ]
 
 [project.scripts]

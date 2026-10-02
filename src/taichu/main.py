@@ -28,6 +28,8 @@ from taichu.application.general_agent.executor import DynamicDagExecutor
 from taichu.application.general_agent.memory_policy import AgentMemoryPolicy
 from taichu.application.general_agent.orchestrator import OrchestratorAgent
 from taichu.application.general_agent.service import GeneralAgentRuntimeService
+from taichu.application.trajectory.observer import TrajectoryRecorder
+from taichu.infrastructure.trajectory.zstd_repository import ZstdTrajectoryRepository
 from taichu.application.evaluations.general_agent_benchmark.container import (
     build_general_agent_benchmark_services,
 )
@@ -220,6 +222,9 @@ def create_app(
     model_catalog = LLMModelCatalog(app_settings)
     llm_usage_repository = JsonlLLMUsageRepository(app_settings.project_assets_dir)
     llm_replay_repository = JsonLLMCallReplayRepository(app_settings.project_assets_dir)
+    trajectory_recorder = TrajectoryRecorder(ZstdTrajectoryRepository(
+        app_settings.project_assets_dir / "generated" / "agent_trajectories"
+    ))
     if llm_gateway is not None:
         llm_service = llm_gateway
         llm_configured = True
@@ -243,6 +248,7 @@ def create_app(
             pass
         llm_service = rightcode_gateway
         llm_configured = rightcode_gateway.configured
+    trajectory_recorder.sanitize = getattr(llm_service, "sanitize_observation", None)
     active_default_model = next(
         (profile.id for profile in llm_service.list_models() if profile.is_default),
         app_settings.rightcode_default_model_id,
@@ -589,6 +595,7 @@ def create_app(
         effect_repository=general_agent_effect_repository,
         context_snapshot_repository=general_agent_context_snapshot_repository,
         llm_replay_repository=llm_replay_repository,
+        trajectory_recorder=trajectory_recorder if app_settings.general_agent_trajectory_enabled else None,
         tool_budget_repository=tool_budget_repository,
     )
     benchmark_capability_catalog = production_capability_catalog_snapshot()
@@ -779,6 +786,7 @@ def create_app(
     application.state.llm_model_catalog = model_catalog
     application.state.llm_usage_repository = llm_usage_repository
     application.state.llm_replay_repository = llm_replay_repository
+    application.state.trajectory_recorder = trajectory_recorder
     application.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

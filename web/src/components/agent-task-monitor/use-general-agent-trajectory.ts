@@ -1,131 +1,69 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { apiRequest } from "@/lib/api-client";
+import type { TrajectoryPage, TrajectoryRow, TrajectorySearch } from "@/lib/trajectory-records";
 
-import {
-  getGeneralAgentConversation, listGeneralAgentContextSnapshots, listGeneralAgentConversations,
-  listGeneralAgentLLMReplays, listGeneralAgentTraces,
-} from "@/lib/api/general-agent";
-import { isGeneralAgentRunActive } from "@/lib/general-agent-display";
-import type { TrajectoryRecord } from "@/lib/general-agent-trajectory-ledger";
-import type { GeneralAgentConversationSummary, GeneralAgentRun } from "@/lib/types/general-agent";
-
-type RunEvidence = {
-  conversationId: string;
-  selection: string;
-  run: GeneralAgentRun;
-  runs: GeneralAgentRun[];
-  records: TrajectoryRecord[];
-  warnings: string[];
-};
-
-export function useGeneralAgentTrajectory(initialConversationId: string, initialRunId: string) {
-  const [conversations, setConversations] = useState<GeneralAgentConversationSummary[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [conversationId, setConversationId] = useState(initialConversationId);
-  const [runId, setRunId] = useState(initialRunId);
-  const [refresh, setRefresh] = useState(0);
-  const [listLoading, setListLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [listError, setListError] = useState("");
-  const [detailError, setDetailError] = useState("");
-  const [data, setData] = useState<RunEvidence | null>(null);
+export function useGeneralAgentTrajectory(conversationId: string, active: boolean) {
+  const [trace, setTrace] = useState<TrajectoryPage | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const generation = useRef(0);
+  const cursor = useRef(0);
+  const reload = useCallback(() => setRevision(value => value + 1), []);
+  const base = `/api/agent-workbench/general-assistant/conversations/${encodeURIComponent(conversationId)}/trajectory`;
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      setListLoading(true);
+    if (!conversationId || !active) return;
+    const current = ++generation.current;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const update = (result: TrajectoryPage) => {
+      if (generation.current !== current) return;
+      cursor.current = result.cursor;
+      setError("");
+      setTrace(previous => {
+        if (!previous) return result;
+        const records = new Map(previous.records.map(row => [row.id, row]));
+        for (const row of result.records) records.set(row.id, row);
+        return { ...result, before: previous.before, has_earlier: previous.has_earlier,
+          records: [...records.values()].sort((a, b) => a.start.sequence - b.start.sequence) };
+      });
+    };
+    const poll = async (initial: boolean) => {
       try {
-        const response = await listGeneralAgentConversations({ page, pageSize: 20 });
-        if (cancelled) return;
-        setConversations(response.conversations);
-        setTotal(response.total);
-        setListError("");
-        setConversationId(current => current || response.conversations[0]?.conversation_id || "");
-      } catch {
-        if (!cancelled) setListError("对话列表加载失败，请刷新重试。");
+        const result = await apiRequest<TrajectoryPage>(`${base}/records?limit=200${initial ? "" : `&after=${cursor.current}`}`, { signal: controller.signal });
+        update(result);
+      } catch (cause) {
+        if (generation.current === current && !controller.signal.aborted) setError(cause instanceof Error ? cause.message : "读取轨迹失败。");
       } finally {
-        if (!cancelled) setListLoading(false);
+        if (generation.current === current && !controller.signal.aborted) {
+          setLoading(false); timer = setTimeout(() => void poll(false), 1500);
+        }
       }
-    })();
-    return () => { cancelled = true; };
-  }, [page, refresh]);
+    };
+    Promise.resolve().then(() => { if (generation.current === current) { setLoading(true); setError(""); void poll(true); } });
+    return () => { generation.current = current + 1; controller.abort(); clearTimeout(timer); };
+  }, [conversationId, base, revision, active]);
 
-  useEffect(() => {
-    if (!conversationId) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let failedEvidenceAttempts = 0;
-    async function load(quiet = false) {
-      if (!quiet) setDetailLoading(true);
-      try {
-        const response = await getGeneralAgentConversation(conversationId);
-        if (cancelled) return;
-        const run = runId && runId !== "all" ? response.runs.find(item => item.run_id === runId) : response.runs.at(-1);
-        if (!run) {
-          setData(null);
-          setDetailError("当前对话没有可查看的运行记录。");
-          return;
-        }
-        const warnings: string[] = [];
-        let hasLoadFailure = false;
-        const records: TrajectoryRecord[] = [];
-        const targets = runId === "all" ? response.runs : [run];
-        for (let index = 0; index < targets.length; index += 3) {
-          if (cancelled) return;
-          records.push(...await Promise.all(targets.slice(index, index + 3).map(async target => {
-            const [traces, calls, snapshots] = await Promise.allSettled([
-              listGeneralAgentTraces(target.run_id, 2000), listGeneralAgentLLMReplays(target.run_id), listGeneralAgentContextSnapshots(target.run_id),
-            ]);
-            const prefix = `第 ${target.request_index} 轮`;
-            if ([traces, calls, snapshots].some(result => result.status === "rejected")) hasLoadFailure = true;
-            if (traces.status === "rejected") warnings.push(`${prefix}调用追踪加载失败`);
-            else if (traces.value.total > traces.value.traces.length) warnings.push(`${prefix}追踪仅载入 ${traces.value.traces.length}/${traces.value.total} 条`);
-            if (calls.status === "rejected") warnings.push(`${prefix}模型回放加载失败`);
-            if (snapshots.status === "rejected") warnings.push(`${prefix}上下文快照加载失败`);
-            return { run: target, evidence: {
-              traces: traces.status === "fulfilled" ? traces.value.traces : [], calls: calls.status === "fulfilled" ? calls.value.calls : [],
-              snapshots: snapshots.status === "fulfilled" ? snapshots.value.snapshots : [],
-            } };
-          })));
-        }
-        if (cancelled) return;
-        setData({ conversationId, selection: runId, run, runs: response.runs, warnings, records });
-        setDetailError("");
-        failedEvidenceAttempts = hasLoadFailure ? failedEvidenceAttempts + 1 : 0;
-        if (targets.some(target => isGeneralAgentRunActive(target.status) || target.status === "waiting_human") || (hasLoadFailure && failedEvidenceAttempts < 3)) {
-          timer = setTimeout(() => void load(true), 5000);
-        }
-      } catch {
-        if (!cancelled) {
-          setDetailError("运行记录加载失败或已删除，请刷新或选择其他对话。");
-          setData(null);
-        }
-      } finally {
-        if (!cancelled) setDetailLoading(false);
-      }
-    }
-    void load();
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [conversationId, runId, refresh]);
-
-  // 选择切换后立即隐藏旧证据；迟到响应由每次 effect 的取消标记隔离。
-  const current = data?.conversationId === conversationId && data.selection === runId ? data : null;
-  const currentConversation = current?.run.conversation_id;
-  const currentRun = current?.run.run_id;
-  useEffect(() => {
-    if (!currentConversation || !currentRun) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set("conversation", currentConversation);
-    url.searchParams.set("run", runId === "all" ? "all" : currentRun);
-    window.history.replaceState(null, "", url);
-  }, [currentConversation, currentRun, runId]);
-  return {
-    conversations, total, page, setPage, conversationId, runId, current,
-    listLoading, detailLoading, error: listError || detailError,
-    reload: () => setRefresh(value => value + 1),
-    selectConversation: (id: string) => { setConversationId(id); setRunId(""); setDetailError(""); },
-    selectRun: setRunId,
-  };
+  const load = useCallback(async (parameters: string) => {
+    const current = generation.current;
+    const result = await apiRequest<TrajectoryPage>(`${base}/records?limit=200&${parameters}`);
+    if (current !== generation.current) return;
+    setTrace(previous => {
+      const records = new Map(previous?.records.map(row => [row.id, row]) ?? []);
+      for (const row of result.records) records.set(row.id, row);
+      const ordered = [...records.values()].sort((a, b) => a.start.sequence - b.start.sequence);
+      return { ...result, cursor: Math.max(previous?.cursor ?? 0, result.cursor), records: ordered,
+        before: ordered[0]?.start.sequence ?? null,
+        has_earlier: result.timeline.length > 0 && result.timeline[0].id !== ordered[0]?.id };
+    });
+  }, [base]);
+  const loadEarlier = useCallback(() => load(`before=${trace?.before ?? 0}`), [load, trace?.before]);
+  const locate = useCallback((id: string) => load(`around=${encodeURIComponent(id)}`), [load]);
+  const search = useCallback((query: string, offset = 0) => apiRequest<TrajectorySearch>(`${base}/search?q=${encodeURIComponent(query)}&offset=${offset}`), [base]);
+  const detail = useCallback((id: string, signal: AbortSignal) => apiRequest<TrajectoryRow>(`${base}/records/${encodeURIComponent(id)}`, { signal }), [base]);
+  return { trace, error, loading, reload,
+    loadEarlier, locate, search, detail };
 }

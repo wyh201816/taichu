@@ -90,6 +90,7 @@ class LLMMessage:
     tool_call_id: str | None = None
     tool_name: str | None = None
     is_error: bool = False
+    thinking_blocks: tuple[dict[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if self.role == "assistant" and self.tool_call_id is not None:
@@ -170,6 +171,7 @@ class LLMResponse:
     provider_request_id: str | None = None
     call_id: str | None = None
     tool_calls: tuple[LLMToolCall, ...] = ()
+    thinking_blocks: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

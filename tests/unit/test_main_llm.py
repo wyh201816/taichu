@@ -52,7 +52,7 @@ class MainLLMAssemblyTest(unittest.TestCase):
             )
 
         self.assertEqual(app.state.llm_gateway.active_provider, "deepseek_official")
-        self.assertEqual(app.state.llm_gateway.default_model_id, "deepseek-v4-flash")
+        self.assertEqual(app.state.llm_gateway.default_model_id, "deepseek-flash")
         self.assertEqual(len(app.state.llm_gateway.list_models()), 2)
 
     def test_default_runtime_uses_rightcode_catalog_without_key(self) -> None:

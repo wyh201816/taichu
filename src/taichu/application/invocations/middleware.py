@@ -32,21 +32,15 @@ from taichu.application.services.invocation_policy_service import (
 logger = logging.getLogger(__name__)
 
 
-class NamedToolChoiceMiddleware(AgentMiddleware):
-    """通过模型 API 的原生 ``tool_choice`` 强制选择一个命名 Tool。"""
-
-    def __init__(self, tool_name: str) -> None:
-        super().__init__()
-        if not tool_name:
-            raise ValueError("命名 Tool 选择不能为空。")
-        self._tool_name = tool_name
+class AutomaticToolChoiceMiddleware(AgentMiddleware):
+    """由模型主动选择原生工具，结构化结果仍由调用方校验。"""
 
     async def awrap_model_call(
         self,
         request: ModelRequest,
         handler: Any,
     ) -> ModelResponse:
-        return await handler(request.override(tool_choice=self._tool_name))
+        return await handler(request.override(tool_choice="auto"))
 
 
 class ModelRequestSettingsMiddleware(AgentMiddleware):

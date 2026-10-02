@@ -1,5 +1,7 @@
 "use client";
 
+import { Tabs } from "@base-ui/react/tabs";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowUp,
@@ -30,6 +32,7 @@ import {
 } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { GeneralAgentTrajectoryPane } from "@/components/agent-workbench/general-agent-trajectory-pane";
 import {
   AgentWorkbenchSwitcher,
   type WorkbenchAgent,
@@ -45,6 +48,7 @@ import {
   cancelGeneralAgentRun,
   deleteGeneralAgentConversation,
   getGeneralAgentConversation,
+  getGeneralAgentRun,
   listGeneralAgentConversations,
   listGeneralAgentContextSnapshots,
   listGeneralAgentMemories,
@@ -64,7 +68,7 @@ import {
   isGeneralAgentRunActive,
 } from "@/lib/general-agent-display";
 import { shouldSubmitGeneralAgentComposer } from "@/lib/general-agent-composer";
-import { readableEntries, splitReadableContent } from "@/lib/general-agent-memory-trace";
+import { readableEntries, splitReadableContent } from "@/lib/general-agent-readable-content";
 import type { ChapterInfo } from "@/lib/types/chapters";
 import type {
   AgentMemoryEntry,
@@ -95,6 +99,14 @@ export function GeneralAgentWorkbench({
 }: {
   onAgentChange: (agent: WorkbenchAgent) => void;
 }) {
+  const searchParams = useSearchParams();
+  const [initialLocation] = useState(() => ({
+    conversationId: searchParams.get("conversation") ?? "",
+    runId: searchParams.get("run") ?? "",
+  }));
+  const [view, setView] = useState<"conversation" | "trajectory">(() =>
+    searchParams.get("view") === "trajectory" ? "trajectory" : "conversation",
+  );
   const [compaction, setCompaction] = useState<ContextCompactionOperation | null>(null);
   const [compactionSubmitting, setCompactionSubmitting] = useState(false);
   const [chapters, setChapters] = useState<ChapterInfo[]>([]);
@@ -149,19 +161,26 @@ export function GeneralAgentWorkbench({
 
   const reloadConversations = useCallback(async (preferredConversationId = "") => {
     const [listResponse, detailResponse] = await Promise.all([
-      listGeneralAgentConversations(),
+      (async () => {
+        const items = new Map<string, GeneralAgentConversationSummary>();
+        for (let page = 1; ; page++) {
+          const response = await listGeneralAgentConversations({ page, pageSize: 100 });
+          for (const conversation of response.conversations) items.set(conversation.conversation_id, conversation);
+          if (!response.conversations.length || page * 100 >= response.total) return [...items.values()];
+        }
+      })(),
       preferredConversationId
         ? getGeneralAgentConversation(preferredConversationId)
         : Promise.resolve(null),
     ]);
-    setConversations(listResponse.conversations);
+    setConversations(listResponse);
     if (detailResponse) {
       setSelectedConversationId(detailResponse.conversation_id);
       setConversationRuns(detailResponse.runs);
       await reloadMemories(detailResponse.conversation_id);
       return;
     }
-    const latest = listResponse.conversations[0];
+    const latest = listResponse[0];
     if (latest) {
       const latestDetail = await getGeneralAgentConversation(latest.conversation_id);
       setSelectedConversationId(latestDetail.conversation_id);
@@ -177,9 +196,11 @@ export function GeneralAgentWorkbench({
     async function load() {
       setLoading(true);
       try {
+        const initialConversationId = initialLocation.conversationId || (initialLocation.runId
+          ? (await getGeneralAgentRun(initialLocation.runId)).run.conversation_id : "");
         const [chapterResponse] = await Promise.all([
           listChapters(),
-          reloadConversations(),
+          reloadConversations(initialConversationId),
         ]);
         if (!cancelled) {
           setChapters(chapterResponse.chapters);
@@ -198,7 +219,19 @@ export function GeneralAgentWorkbench({
     return () => {
       cancelled = true;
     };
-  }, [reloadConversations]);
+  }, [reloadConversations, initialLocation]);
+
+  useEffect(() => {
+    if (loading) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("assistant", "general");
+    if (selectedConversationId) url.searchParams.set("conversation", selectedConversationId);
+    else url.searchParams.delete("conversation");
+    if (view === "trajectory") url.searchParams.set("view", "trajectory");
+    else url.searchParams.delete("view");
+    url.searchParams.delete("run");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }, [selectedConversationId, view, loading]);
 
   useEffect(() => {
     if (!selectedConversationId || !compaction || !["queued", "running"].includes(compaction.status)) return;
@@ -419,6 +452,7 @@ export function GeneralAgentWorkbench({
   }
 
   function handleNewConversation() {
+    setView("conversation");
     setSelectedConversationId("");
     setConversationRuns([]);
     setGoal("");
@@ -622,8 +656,15 @@ export function GeneralAgentWorkbench({
           </div>
         </aside>
 
-        <section className="flex min-h-0 min-w-0 flex-col bg-[var(--tc-surface-muted)]">
-          <header className="shrink-0 px-8 pb-2 pt-5">
+        <Tabs.Root value={view} onValueChange={value => setView(value as "conversation" | "trajectory")} className="flex min-h-0 min-w-0 flex-col bg-[var(--tc-surface-muted)]">
+          <div className="tc-trajectory-workspace shrink-0">
+            <Tabs.List aria-label="当前会话视图" className="tc-trajectory-tabs flex h-10 gap-4 px-8">
+              <Tabs.Tab value="conversation" className="px-3 text-sm text-[var(--tc-text-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--tc-trajectory-selected)]">对话</Tabs.Tab>
+              <Tabs.Tab value="trajectory" className="px-3 text-sm text-[var(--tc-text-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--tc-trajectory-selected)]">轨迹</Tabs.Tab>
+            </Tabs.List>
+          </div>
+
+          <header className={cn("shrink-0 px-8 pb-2 pt-5", view === "trajectory" && "hidden")}>
             <div className="mx-auto w-full max-w-[900px]">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -705,7 +746,7 @@ export function GeneralAgentWorkbench({
             </div>
           </header>
 
-          <div className="tc-editor-scrollbar min-h-0 flex-1 overflow-y-auto">
+          <Tabs.Panel value="conversation" keepMounted className="tc-editor-scrollbar min-h-0 flex-1 overflow-y-auto data-[hidden]:hidden">
             <div className="mx-auto flex min-h-full w-full max-w-[900px] flex-col px-8 py-6">
               {conversationRuns.length ? (
                 conversationRuns.map(run => (
@@ -740,9 +781,14 @@ export function GeneralAgentWorkbench({
               )}
               <div ref={conversationEndRef} aria-hidden="true" />
             </div>
-          </div>
+          </Tabs.Panel>
 
-          <div className="shrink-0 bg-[var(--tc-surface-muted)] px-8 pb-5 pt-2">
+          <Tabs.Panel value="trajectory" keepMounted className="min-h-0 flex-1 data-[hidden]:hidden">
+            <GeneralAgentTrajectoryPane key={selectedConversationId} conversationId={selectedConversationId} active={view === "trajectory"} />
+          </Tabs.Panel>
+
+          {view === "trajectory" && error && <p role="alert" className="px-4 py-2 text-sm text-[var(--tc-text-primary)]">{error}</p>}
+          <div className={cn("shrink-0 bg-[var(--tc-surface-muted)] px-8 pb-5 pt-2", view === "trajectory" && "hidden")}>
             <div className="mx-auto w-full max-w-[900px]">
               {error ? (
                 <div
@@ -982,7 +1028,7 @@ export function GeneralAgentWorkbench({
               </section>
             </div>
           </div>
-        </section>
+        </Tabs.Root>
       </section>
     </AppShell>
   );

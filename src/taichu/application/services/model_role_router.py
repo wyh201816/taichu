@@ -41,7 +41,7 @@ class ModelRoleRouter:
     def model_for(self, role: str) -> str:
         return self._overrides.get(
             role,
-            "deepseek-v4-flash"
+            "deepseek-flash"
             if role == "context_extractor"
             else self._default_model_id,
         )

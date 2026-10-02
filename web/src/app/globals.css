@@ -4,6 +4,41 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* 用户确认的新轨迹工作区：DSH 记录与详情布局，保留太初深色主题。 */
+.tc-trajectory-workspace {
+  --tc-workspace-focus: var(--tc-trajectory-selected);
+  --tc-aurora-line: #4f81ee33;
+  --ring: var(--tc-trajectory-selected);
+}
+.tc-trajectory-workspace .tc-trajectory-row {
+  border-bottom: 1px solid color-mix(in srgb, var(--tc-text-primary) 4%, transparent);
+  border-radius: 0;
+}
+.tc-trajectory-workspace .tc-trajectory-row-selected {
+  background: color-mix(in srgb, var(--tc-text-primary) 8%, var(--tc-surface-page));
+  box-shadow: inset 3px 0 var(--tc-trajectory-selected);
+}
+.tc-trajectory-workspace .tc-trajectory-inspector {
+  border-left: 1px solid var(--tc-border-subtle);
+  border-radius: 0;
+}
+.tc-trajectory-workspace .tc-trajectory-timeline {
+  border-bottom: 1px solid var(--tc-border-subtle);
+}
+.tc-trajectory-workspace .tc-trajectory-duration[aria-pressed="true"] {
+  color: var(--tc-text-primary);
+  background: color-mix(in srgb, var(--tc-text-primary) 8%, transparent);
+}
+.tc-trajectory-workspace .tc-trajectory-tabs {
+  border-bottom: 1px solid var(--tc-border-subtle);
+}
+.tc-trajectory-workspace .tc-trajectory-tabs [aria-selected="true"] {
+  color: var(--tc-trajectory-selected);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: inset 0 -2px var(--tc-trajectory-selected);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -144,6 +179,11 @@
   --tc-monitor-knowledge: #6d28d9;
   --tc-monitor-general-agent: #0f766e;
   --tc-monitor-rag: #0369a1;
+  --tc-trajectory-input: #60b886;
+  --tc-trajectory-user: #6791e8;
+  --tc-trajectory-model: #8c72af;
+  --tc-trajectory-tool: #df8b25;
+  --tc-trajectory-selected: #4f81ee;
   --tc-success-text: var(--tc-deep-forest-teal);
   --tc-success-border: rgba(3, 79, 70, 0.28);
   --tc-success-soft: rgba(3, 79, 70, 0.08);

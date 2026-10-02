@@ -2982,6 +2982,7 @@ dependencies = [
     { name = "tokenizers" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "vector-graph-rag" },
+    { name = "zstandard" },
 ]
 
 [package.dev-dependencies]
@@ -3007,6 +3008,7 @@ requires-dist = [
     { name = "tokenizers" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
     { name = "vector-graph-rag", specifier = "==0.2.2" },
+    { name = "zstandard", specifier = ">=0.25,<1" },
 ]
 
 [package.metadata.requires-dev]

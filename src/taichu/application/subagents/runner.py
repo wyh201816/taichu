@@ -32,6 +32,7 @@ from taichu.application.invocations.models import (
 )
 from taichu.application.invocations.middleware import (
     ModelInvocationTraceMiddleware,
+    AutomaticToolChoiceMiddleware,
 )
 from taichu.application.services.model_role_router import ModelRoleRouter
 from taichu.application.services.invocation_policy_service import (
@@ -58,7 +59,9 @@ async def run_structured_subagent(
     router = context.require("model_role_router", ModelRoleRouter)
     input_json = input_data.model_dump_json(indent=2)
     user_prompt = (
-        "请完成下面的专业任务，并通过系统指定的结构化输出 Tool 返回结果。\n\n"
+        "请按需主动调用提供的业务工具完成专业任务；完成后，"
+        f"主动调用 {manifest.output_schema.__name__} 原生结果提交接口返回结果。"
+        "按照接口定义填写结果，不用普通文字或消息正文中的 JSON 代替提交。\n\n"
         f"任务输入：\n{input_json}"
     )
     model_id = invocation.model_id or router.model_for(manifest.model_role)
@@ -109,6 +112,7 @@ async def run_structured_subagent(
     store_value = context.capabilities.get("graph_store")
     agent_store = store_value if isinstance(store_value, BaseStore) else None
     middleware_stack: list[Any] = [
+        AutomaticToolChoiceMiddleware(),
         ModelCallLimitMiddleware(
             run_limit=_effective_model_call_limit(manifest, invocation),
             exit_behavior="error",

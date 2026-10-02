@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import "./trajectory.test";
-import "./trajectory-ledger.test";
 
 import {
   buildGeneralAgentExecutionFlow,

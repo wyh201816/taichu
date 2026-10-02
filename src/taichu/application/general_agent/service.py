@@ -89,6 +89,9 @@ from taichu.application.general_agent.recovery import (
 )
 from taichu.application.invocations.models import now_iso
 from taichu.application.models.llm_replay import LLMCallReplayRecord
+from taichu.application.trajectory.observer import (
+    ObservationScope, TrajectoryRecorder, active_observation,
+)
 from taichu.application.services.invocation_policy_service import (
     InvocationPolicyService,
 )
@@ -143,8 +146,10 @@ class GeneralAgentRuntimeService:
         graph_store: BaseStore | None = None,
         fault_hook: GeneralAgentFaultHook | None = None,
         context_pipeline: ContextPipeline | None = None,
+        trajectory_recorder: TrajectoryRecorder | None = None,
     ) -> None:
         self._repository = repository
+        self._trajectory_recorder = trajectory_recorder
         self._event_center = event_center
         self._orchestrator = orchestrator
         self._executor = executor
@@ -275,6 +280,17 @@ class GeneralAgentRuntimeService:
                 as_node=START,
             )
             run = await self._project_run_snapshot(run, "context_state_inherited")
+            if self._trajectory_recorder is not None:
+                observation = ObservationScope(
+                    self._trajectory_recorder, run.conversation_id,
+                    run.run_id, run.request_index,
+                )
+                await observation.emit("user", {
+                    "content": run.user_goal,
+                    "message_id": run.current_request_message_id,
+                    "source": {"kind": "user", "conversation_id": run.conversation_id},
+                    "created_at": run.created_at,
+                })
             return run
 
     async def run(
@@ -570,7 +586,7 @@ class GeneralAgentRuntimeService:
                     run.conversation_id, asyncio.Lock()
                 )
                 async with lock:
-                    config = {"configurable": {"thread_id": run.conversation_id}}
+                    config: RunnableConfig = {"configurable": {"thread_id": run.conversation_id}}
                     official = _run_from_graph_snapshot(
                         await self._graph.aget_state(config)
                     )
@@ -1157,6 +1173,49 @@ class GeneralAgentRuntimeService:
                 asyncio.create_task(self._drain_manual_request(run_id))
 
     async def _execute_run(
+        self,
+        run_id: str,
+        *,
+        resume_from_graph: bool = False,
+        recovery_prepared: bool = False,
+        human_resume: dict[str, Any] | None = None,
+    ) -> GeneralAgentRun:
+        if self._trajectory_recorder is None:
+            return await self._execute_graph_run(
+                run_id, resume_from_graph=resume_from_graph,
+                recovery_prepared=recovery_prepared, human_resume=human_resume,
+            )
+        run = await self._require_run(run_id)
+        scope = ObservationScope(
+            self._trajectory_recorder, run.conversation_id, run.run_id, run.request_index,
+        )
+        token = active_observation.set(scope)
+        try:
+            await scope.emit("run_started", {"resume": resume_from_graph or human_resume is not None})
+            result = await self._execute_graph_run(
+                run_id, resume_from_graph=resume_from_graph,
+                recovery_prepared=recovery_prepared, human_resume=human_resume,
+            )
+            await scope.emit("run_state", {
+                "status": result.status.value, "final_answer": result.final_answer,
+                "errors": result.errors, "finished_at": result.finished_at,
+            })
+            return result
+        except BaseException as error:
+            await scope.emit("run_interrupted", {"error_type": type(error).__name__, "error": str(error)})
+            if isinstance(error, asyncio.CancelledError):
+                # 内层已经按官方执行语义保存取消结果，只读核对后补充观测。
+                try:
+                    cancelled_run = await self._require_run(run_id)
+                    await scope.emit("run_state", {"status": cancelled_run.status.value,
+                        "finished_at": cancelled_run.finished_at})
+                except Exception:
+                    self._trajectory_recorder.mark_incomplete(run.conversation_id)
+            raise
+        finally:
+            active_observation.reset(token)
+
+    async def _execute_graph_run(
         self,
         run_id: str,
         *,

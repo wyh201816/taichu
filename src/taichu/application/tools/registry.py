@@ -1,6 +1,7 @@
 """校验、注册和通过统一协议调用可复用 Tool。"""
 
 import asyncio
+from taichu.application.trajectory.observer import active_observation, active_tool_observation, ToolObservation
 import hashlib
 import logging
 from time import perf_counter
@@ -188,12 +189,59 @@ class ToolRegistry:
         input_data: BaseModel | dict[str, object],
         invocation: InvocationContext,
     ) -> InvocationEnvelope[BaseModel]:
+        observation = active_observation.get()
+        if observation is None:
+            return await self._invoke_checked(name, input_data, invocation)
+        manifest = self.get_manifest(name)
+        call_id = f"tool_{uuid4().hex}"
+        parent_id = observation.native_tool_origins.get(invocation.call_id) or invocation.parent_call_id
+        timer = perf_counter()
+        await observation.emit_lazy("tool_started", lambda: {
+            "name": name,
+            "arguments": input_data.model_dump(mode="json") if isinstance(input_data, BaseModel) else input_data,
+            "schema": manifest.input_schema.model_json_schema(),
+            "output_schema": manifest.output_schema.model_json_schema(),
+            "native_call_id": invocation.call_id,
+            "boundary": "工具调用入口",
+        }, call_id=call_id, parent_call_id=parent_id)
+        tool_observation = ToolObservation(observation, call_id, parent_id)
+        token = active_tool_observation.set(tool_observation)
+        try:
+            result = await self._invoke_checked(name, input_data, invocation)
+        except BaseException as error:
+            await observation.emit("tool_failed", {
+                "error_type": type(error).__name__, "error": str(error),
+                "execution": tool_observation.execution,
+                "duration_ms": round((perf_counter() - timer) * 1000),
+            }, call_id=call_id, parent_call_id=parent_id)
+            raise
+        finally:
+            active_tool_observation.reset(token)
+        await observation.emit_lazy("tool_completed", lambda: {
+            "result": result.output.model_dump(mode="json"),
+            "warnings": result.warnings,
+            "execution": tool_observation.execution,
+            "duration_ms": round((perf_counter() - timer) * 1000),
+        }, call_id=call_id, parent_call_id=parent_id)
+        return result
+
+    async def _invoke_checked(
+        self,
+        name: str,
+        input_data: BaseModel | dict[str, object],
+        invocation: InvocationContext,
+    ) -> InvocationEnvelope[BaseModel]:
         """统一执行 Schema、权限、幂等、超时、结果和技术日志门禁。"""
         if name not in self._plugins:
             raise ToolNotFoundError(name)
         plugin = self._plugins[name]
         manifest = plugin.manifest
         parsed_input = manifest.input_schema.model_validate(input_data)
+        observation = active_tool_observation.get()
+        if observation is not None:
+            await observation.scope.emit_lazy("tool_prepared", lambda: {
+                "arguments": parsed_input.model_dump(mode="json"),
+            }, call_id=observation.call_id, parent_call_id=observation.parent_call_id)
         self._validate_caller(manifest, invocation)
         await self._claim_tool_budget(manifest.name, parsed_input, invocation)
         policy = self._policy_service()
@@ -215,6 +263,8 @@ class ToolRegistry:
                 input_payload=parsed_input,
             )
             if existing is not None:
+                if observation is not None:
+                    observation.execution = "reused"
                 output = manifest.output_schema.model_validate(existing)
                 return await self._completed_envelope(
                     manifest=manifest,
@@ -244,6 +294,10 @@ class ToolRegistry:
         started_at = now_iso()
         timer = perf_counter()
         try:
+            if observation is not None:
+                observation.execution = "executed"
+                await observation.scope.emit("tool_executing", {}, call_id=observation.call_id,
+                                             parent_call_id=observation.parent_call_id)
             async with asyncio.timeout(manifest.default_timeout_seconds):
                 raw_output = await plugin.run(
                     parsed_input,

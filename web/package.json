@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test:editor": "tsc -p tsconfig.tests.json && node .test-dist/tests/editor/save-coordinator.test.js && node .test-dist/tests/editor/ai-card-actions.test.js",
     "test:agent-evaluation": "tsc -p tsconfig.tests.json && node .test-dist/tests/agent-evaluation/evaluation-view-model.test.js",
-    "test:general-agent": "tsc -p tsconfig.tests.json && node .test-dist/tests/general-agent/display.test.js && node .test-dist/tests/general-agent/monitor.test.js && node .test-dist/tests/general-agent/memory-trace.test.js && node .test-dist/tests/general-agent/evaluation-view.test.js",
+    "test:general-agent": "tsc -p tsconfig.tests.json && node .test-dist/tests/general-agent/display.test.js && node .test-dist/tests/general-agent/monitor.test.js && node .test-dist/tests/general-agent/readable-content.test.js && node .test-dist/tests/general-agent/evaluation-view.test.js",
     "test:knowledge-ui": "tsc -p tsconfig.tests.json && node .test-dist/tests/knowledge/structured-fields.test.js && node .test-dist/tests/knowledge/identity-match.test.js && node .test-dist/tests/knowledge/agent-run-display.test.js",
     "test:llm": "tsc -p tsconfig.tests.json && node .test-dist/tests/llm/model-selection.test.js"
   },

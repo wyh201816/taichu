@@ -70,7 +70,7 @@ class Model(BaseChatModel):
         if isinstance(answer, Exception):
             raise answer
         if isinstance(answer, dict):
-            choice = kwargs["tool_choice"]
+            choice = kwargs["tools"][-1]["function"]["name"]
             answer = AIMessage(
                 content="",
                 tool_calls=[{"id": "result", "name": choice, "args": answer}],
@@ -119,7 +119,7 @@ def make_run(*, rounds=0, length=30, **updates):
 def engine(tmp_path, answers):
     model = Model(answers=answers)
     counter = ModelContextTokens(
-        windows={"test-model": 100_000, "deepseek-v4-flash": 100_000}
+        windows={"test-model": 100_000, "deepseek-flash": 100_000}
     )
     return ContextPipeline(
         model=model,
@@ -354,7 +354,7 @@ async def test_empty_patch_native_output_and_cursor_replay(tmp_path):
     assert again.context_pipeline == updated.context_pipeline
     assert len(p.model._calls) == 1
     _, native = p.model._calls[0]
-    assert native["tool_choice"] == "WorkingMemoryPatch"
+    assert native["tool_choice"] == "auto"
     assert any(t["function"]["name"] == "WorkingMemoryPatch" for t in native["tools"])
 
 

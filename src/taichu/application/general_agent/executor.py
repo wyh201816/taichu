@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from taichu.application.trajectory.observer import active_observation
+
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
@@ -1270,11 +1272,16 @@ class DynamicDagExecutor:
             invocation_scope["session_memory"] = (
                 context_envelope.working_memory.session_memory.model_dump(mode="json")
             )
+        observation = active_observation.get()
+        observed_parent = observation.plan_origins.get((run.plan_revision, item.node_id)) if observation else None
+        native_call_id = item.attempt_id or _attempt_id(run, item.node_id)
+        if observation is not None and observed_parent is not None:
+            observation.native_tool_origins[native_call_id] = observed_parent
         return InvocationContext(
             task_id=run.task_id,
             run_id=run.run_id,
             conversation_id=run.conversation_id,
-            call_id=item.attempt_id or _attempt_id(run, item.node_id),
+            call_id=native_call_id,
             caller_type="orchestrator",
             caller_name="general_writing_orchestrator",
             phase=f"dag:{item.node_id}",

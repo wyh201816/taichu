@@ -21,14 +21,14 @@ class Settings(BaseSettings):
     rightcode_deepseek_anthropic_base_url: str = (
         "https://rightapi.ai/deepseek/anthropic"
     )
-    rightcode_default_model_id: str = "deepseek-v4-pro"
+    rightcode_default_model_id: str = "deepseek-flash"
     rightcode_request_timeout_seconds: float = 300
     rightcode_max_retries: int = 2
     rightcode_model_prices_json: str = "{}"
     deepseek_api_key: SecretStr = SecretStr("")
     deepseek_anthropic_base_url: str = "https://api.deepseek.com/anthropic"
     deepseek_fallback_enabled: bool = True
-    deepseek_fallback_model_id: str = "deepseek-v4-pro"
+    deepseek_fallback_model_id: str = "deepseek-flash"
     deepseek_fallback_max_retries: int = 1
     agent_model_roles_json: str = "{}"
 
@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     reranker_request_timeout_seconds: float = 180
 
     general_agent_memory_age_decay_days: int = 30
+    general_agent_trajectory_enabled: bool = True
     general_agent_memory_minimum_relevance: float = 0.01
     general_agent_result_preview_tokens: int = 4_000
     general_agent_model_windows_json: str = "{}"

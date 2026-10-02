@@ -31,6 +31,7 @@ from pydantic import PrivateAttr
 from taichu.application.invocations.config import (
     TAICHU_MODEL_REQUEST_METADATA_KEY,
 )
+from taichu.infrastructure.trajectory.model_observation import observed_completion, observed_stream
 from taichu.infrastructure.llm.contracts import (
     LLMGatewayContract,
     LLMRequest,
@@ -156,9 +157,9 @@ class GatewayChatModel(BaseChatModel):
         if stop:
             raise ValueError("当前模型网关不支持 stop 参数。")
         request = _gateway_request(self, messages, run_manager, kwargs)
-        response = await self._gateway.complete(request)
+        response, trajectory_call_id = await observed_completion(self._gateway, request)
         message = AIMessage(
-            content=response.text,
+            content=_response_content(response, response.text),
             id=response.call_id or response.provider_request_id,
             tool_calls=[
                 {
@@ -170,7 +171,9 @@ class GatewayChatModel(BaseChatModel):
                 for call in response.tool_calls
             ],
             usage_metadata=_usage_metadata(response.usage),
-            response_metadata=_response_metadata(response),
+            response_metadata={**_response_metadata(response), **(
+                {"trajectory_call_id": trajectory_call_id} if trajectory_call_id else {}
+            )},
         )
         return ChatResult(
             generations=[ChatGeneration(message=message)],
@@ -191,7 +194,7 @@ class GatewayChatModel(BaseChatModel):
         usage_emitted = False
         completed = False
         streamed_tool_metadata: dict[int, tuple[str | None, str | None]] = {}
-        async for event in self._gateway.stream(request):
+        async for event, trajectory_call_id in observed_stream(self._gateway, request):
             if event.event_type == "text_delta" and event.delta:
                 saw_text = True
                 yield ChatGenerationChunk(
@@ -268,13 +271,15 @@ class GatewayChatModel(BaseChatModel):
                         )
                 yield ChatGenerationChunk(
                     message=AIMessageChunk(
-                        content="" if saw_text else response.text,
+                        content=_response_content(response, "" if saw_text else response.text),
                         id=response.call_id or response.provider_request_id,
                         tool_call_chunks=completion_tool_chunks,
                         usage_metadata=(
                             None if usage_emitted else _usage_metadata(response.usage)
                         ),
-                        response_metadata=_response_metadata(response),
+                        response_metadata={**_response_metadata(response), **(
+                            {"trajectory_call_id": trajectory_call_id} if trajectory_call_id else {}
+                        )},
                     )
                 )
         if not completed:
@@ -296,6 +301,11 @@ def _gateway_message(message: BaseMessage) -> Any:
         return LLMMessage(
             role="assistant",
             content=_stringify_content(message.content),
+            thinking_blocks=tuple(
+                dict(block) for block in message.content
+                if isinstance(block, dict)
+                and block.get("type") in {"thinking", "redacted_thinking"}
+            ) if isinstance(message.content, list) else (),
             tool_calls=tuple(
                 LLMToolCall(
                     call_id=str(item.get("id") or ""),
@@ -318,6 +328,13 @@ def _gateway_message(message: BaseMessage) -> Any:
     return LLMMessage(role=role, content=_stringify_content(message.content))
 
 
+def _response_content(response: LLMResponse, text: str) -> Any:
+    """保留供应商原生思考块及签名，供官方消息链回传，不混入回答文本。"""
+    if not response.thinking_blocks:
+        return text
+    return [*response.thinking_blocks, *([{"type": "text", "text": text}] if text else [])]
+
+
 def _gateway_tool_definition(value: dict[str, Any]) -> Any:
     function = value.get("function", value)
     if not isinstance(function, dict):
@@ -334,16 +351,13 @@ def _gateway_tool_definition(value: dict[str, Any]) -> Any:
 
 
 def _normalize_tool_choice(value: str | None) -> str:
+    """项目采用自动工具选择，包括框架为结构化输出生成的 any/命名选择。"""
     if value is None:
         return "auto"
     normalized = value.strip()
-    if normalized in {"any", "required"}:
-        return "required"
-    if normalized in {"auto", "none"}:
-        return normalized
     if not normalized:
-        raise ValueError("命名 Tool 选择不能为空。")
-    return normalized
+        raise ValueError("工具选择策略不能为空。")
+    return "none" if normalized == "none" else "auto"
 
 
 def _model_request_metadata(

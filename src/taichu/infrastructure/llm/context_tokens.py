@@ -13,8 +13,9 @@ from langchain_core.messages import AnyMessage
 # https://platform.claude.com/docs/en/build-with-claude/context-windows
 # https://api-docs.deepseek.com/quick_start/pricing
 MODEL_CONTEXT_WINDOWS = {
+    "deepseek-flash": 1_000_000,
     **{f"gpt-5-6-{name}": 1_050_000 for name in ("luna", "terra", "sol")},
-    **{f"deepseek-v4-{name}": 1_000_000 for name in ("flash", "pro")},
+    "deepseek-v4-pro": 1_000_000,
     **{
         f"claude-{name}": 1_000_000
         for name in ("opus-4-6", "opus-4-7", "opus-4-8", "sonnet-4-6", "sonnet-5")

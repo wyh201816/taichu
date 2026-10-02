@@ -20,6 +20,7 @@ from taichu.api.routes import (
     settings,
     vector_graph,
     writing_ai,
+    trajectory,
 )
 
 
@@ -33,6 +34,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(chapters.router)
     app.include_router(export.router)
     app.include_router(general_agent.router)
+    app.include_router(trajectory.router)
     app.include_router(general_agent_benchmarks.router)
     app.include_router(inbox.router)
     app.include_router(llm.router)

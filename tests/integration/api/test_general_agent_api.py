@@ -118,8 +118,8 @@ class _DirectAnswerGateway:
         tool_calls = (
             (
                 LLMToolCall(
-                    call_id=f"call_{len(self.requests)}_{request.tool_choice}",
-                    name=request.tool_choice,
+                    call_id=f"call_{len(self.requests)}_{request.tools[-1].name}",
+                    name=request.tools[-1].name,
                     arguments_json=json.dumps(payload, ensure_ascii=False),
                 ),
             )
@@ -183,11 +183,16 @@ class GeneralAgentApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run["agent_name"], "general_writing_assistant")
         self.assertEqual(run["model_id"], "deepseek-v4-pro")
         self.assertTrue(self.gateway.requests)
+        self.assertTrue(all(request.tool_choice == "auto" for request in self.gateway.requests))
+        self.assertTrue(all(
+            any(request.tools[-1].name in message.content for message in request.messages)
+            for request in self.gateway.requests if request.tools
+        ))
         self.assertTrue(
             all(
                 request.model_id
                 == (
-                    "deepseek-v4-flash"
+                    "deepseek-flash"
                     if request.task_name == "context.extract"
                     else "deepseek-v4-pro"
                 )

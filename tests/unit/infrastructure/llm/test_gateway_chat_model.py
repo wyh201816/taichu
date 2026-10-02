@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from typing import Literal
 
 import pytest
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field
 
 from taichu.infrastructure.llm.contracts import (
@@ -123,7 +123,7 @@ async def test_structured_output_schema_is_sent_as_native_tool_parameter() -> No
     assert request.task_name == "结构化服务测试"
     assert request.chapter_ids == ("chapter_001",)
     assert request.feature == "原生结构化输出"
-    assert request.tool_choice == "required"
+    assert request.tool_choice == "auto"
     assert request.tools[0].parameters["properties"]["native_schema_marker"]
     assert all(
         "native_schema_marker" not in message.content for message in request.messages
@@ -131,7 +131,7 @@ async def test_structured_output_schema_is_sent_as_native_tool_parameter() -> No
 
 
 @pytest.mark.anyio
-async def test_named_tool_choice_is_preserved_for_forced_structured_output() -> None:
+async def test_framework_named_output_choice_becomes_auto_with_native_schema() -> None:
     gateway = _RecordingGateway()
     model = GatewayChatModel(gateway, model_id="test-model")
     bound = model.bind_tools(
@@ -143,12 +143,59 @@ async def test_named_tool_choice_is_preserved_for_forced_structured_output() -> 
 
     assert message.tool_calls[0]["name"] == "_StructuredReply"
     request = gateway.requests[0]
-    assert request.tool_choice == "_StructuredReply"
+    assert request.tool_choice == "auto"
     assert [tool.name for tool in request.tools] == [
         "_CapabilityInput",
         "_StructuredReply",
     ]
     assert request.tools[0].parameters["properties"]["chapter_order"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_thinking_blocks_survive_native_tool_continuation(stream: bool) -> None:
+    from dataclasses import replace
+
+    thinking = {"type": "thinking", "thinking": "供应商测试内容", "signature": "provider-signature"}
+
+    class ThinkingGateway(_RecordingGateway):
+        async def complete(self, request):
+            return replace(await super().complete(request), text="提交结果", thinking_blocks=(thinking,))
+
+    gateway = ThinkingGateway()
+    bound = GatewayChatModel(gateway, model_id="deepseek-flash").bind_tools([_StructuredReply])
+    messages = [HumanMessage(content="提交结果。")]
+    if stream:
+        chunks = [chunk async for chunk in bound.astream(messages)]
+        answer = chunks[0]
+        for chunk in chunks[1:]:
+            answer += chunk
+    else:
+        answer = await bound.ainvoke(messages)
+    assert answer.text == "提交结果"
+    assert thinking in answer.content
+    await bound.ainvoke([*messages, answer, ToolMessage(content="已接收", tool_call_id="call_native_schema")])
+    returned = gateway.requests[-1].messages[1]
+    assert returned.content == "提交结果"
+    assert returned.thinking_blocks == (thinking,)
+    assert returned.tool_calls[0].call_id == "call_native_schema"
+
+
+@pytest.mark.anyio
+async def test_auto_choice_plain_text_is_not_accepted_as_structured_result() -> None:
+    from dataclasses import replace
+
+    class PlainTextGateway(_RecordingGateway):
+        async def complete(self, request):
+            return replace(await super().complete(request), text="普通回答", tool_calls=())
+
+    gateway = PlainTextGateway()
+    result = await GatewayChatModel(gateway, model_id="deepseek-flash").with_structured_output(
+        _StructuredReply, include_raw=True,
+    ).ainvoke([HumanMessage(content="提交结果。")])
+    assert gateway.requests[0].tool_choice == "auto"
+    assert result["parsed"] is None
+    assert result["raw"].text == "普通回答"
 
 
 @pytest.mark.anyio

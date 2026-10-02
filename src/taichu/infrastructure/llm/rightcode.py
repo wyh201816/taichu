@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from taichu.infrastructure.trajectory.model_observation import observed_http_post, observe_attempt_outcome
+from taichu.infrastructure.trajectory.http_observation import (
+    ATTEMPT_EXTENSION, StreamAttemptObservation, observed_http_stream,
+)
+
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field, replace
@@ -159,6 +164,29 @@ class RightCodeLLMGateway(LLMGatewayContract):
 
         if self._owns_client:
             await self._client.aclose()
+
+    def sanitize_observation(self, value: Any) -> tuple[Any, int]:
+        """只脱敏观测副本，实际消息和供应商请求保持不变。"""
+        safe, count = _redact_payload_value(value)
+        secrets = {self._settings.rightcode_api_key.get_secret_value(),
+                   self._settings.deepseek_api_key.get_secret_value()} - {""}
+
+        def redact(item: Any) -> Any:
+            nonlocal count
+            if isinstance(item, str):
+                for secret in secrets:
+                    occurrences = item.count(secret)
+                    if occurrences:
+                        item = item.replace(secret, "[已脱敏]")
+                        count += occurrences
+                return item
+            if isinstance(item, dict):
+                return {key: redact(content) for key, content in item.items()}
+            if isinstance(item, (list, tuple)):
+                return [redact(content) for content in item]
+            return item
+
+        return redact(safe), count
 
     @property
     def active_provider(self) -> Literal["rightcode", "deepseek_official"]:
@@ -432,10 +460,13 @@ class RightCodeLLMGateway(LLMGatewayContract):
         attempts = max(0, retries) + 1
         for attempt in range(attempts):
             try:
-                response = await self._client.post(
+                response = await observed_http_post(
+                    self._client,
                     url,
                     headers=self._headers(profile),
                     json=payload,
+                    provider=profile.provider,
+                    wire_protocol=profile.wire_protocol,
                 )
                 if response.status_code < 400:
                     response_body = response.json()
@@ -450,6 +481,7 @@ class RightCodeLLMGateway(LLMGatewayContract):
                         )
                     content_block_types = _content_block_types(response_body, parsed)
                     if parsed.text.strip() or parsed.tool_calls:
+                        await observe_attempt_outcome(response, status="completed")
                         return _CompletionResult(
                             response=parsed,
                             diagnostics=_GatewayDiagnostics(
@@ -469,6 +501,7 @@ class RightCodeLLMGateway(LLMGatewayContract):
                             content_block_types=content_block_types,
                             retry_count=attempt,
                         )
+                        await observe_attempt_outcome(response, status="failed", error_code=error.code, error=error.message)
                         if attempt == attempts - 1:
                             raise error
                         continue
@@ -481,6 +514,7 @@ class RightCodeLLMGateway(LLMGatewayContract):
                         content_block_types=content_block_types,
                         retry_count=attempt,
                     )
+                    await observe_attempt_outcome(response, status="failed", error_code=error.code, error=error.message)
                     if attempt == attempts - 1:
                         raise error
                 else:
@@ -490,6 +524,7 @@ class RightCodeLLMGateway(LLMGatewayContract):
                         error_summary=_upstream_error_summary(response),
                         retry_count=attempt,
                     )
+                    await observe_attempt_outcome(response, status="failed", error_code=error.code, error=error.message)
                     if response.status_code != 429 and response.status_code < 500:
                         raise error
                     if attempt == attempts - 1:
@@ -525,6 +560,7 @@ class RightCodeLLMGateway(LLMGatewayContract):
                     error_summary="响应不是合法 JSON",
                     retry_count=attempt,
                 )
+                await observe_attempt_outcome(response, status="failed", error_code=error.code, error=error.message)
                 if attempt == attempts - 1:
                     raise error from exc
             await asyncio.sleep(min(0.25 * (2**attempt), 1.0))
@@ -553,6 +589,7 @@ class RightCodeLLMGateway(LLMGatewayContract):
         last_usage = LLMUsage()
         text_parts: list[str] = []
         streamed_tool_calls: dict[int, _StreamingToolCall] = {}
+        thinking_blocks: dict[int, dict[str, Any]] = {}
         provider_tool_indexes: dict[int, int] = {}
         payload: dict[str, Any] | None = None
         yield LLMStreamEvent(event_type="started", call_id=call_id)
@@ -560,8 +597,9 @@ class RightCodeLLMGateway(LLMGatewayContract):
             self._ensure_provider_configured(profile.provider)
             payload = _request_payload(profile, request, stream=True)
             url = self._endpoint(profile)
-            async with self._client.stream(
-                "POST", url, headers=self._headers(profile), json=payload
+            async with observed_http_stream(
+                self._client, "POST", url, headers=self._headers(profile), json=payload,
+                provider=profile.provider, wire_protocol=profile.wire_protocol,
             ) as response:
                 if response.status_code >= 400:
                     raise _status_error(response.status_code)
@@ -732,6 +770,8 @@ class RightCodeLLMGateway(LLMGatewayContract):
                             )
                     elif event_type == "content_block_start":
                         block = event_payload.get("content_block")
+                        if isinstance(block, dict) and block.get("type") in {"thinking", "redacted_thinking"}:
+                            thinking_blocks[int(event_payload.get("index", 0))] = dict(block)
                         if isinstance(block, dict) and block.get("type") == "tool_use":
                             index = _stream_tool_index(
                                 event_payload.get("index"),
@@ -764,7 +804,13 @@ class RightCodeLLMGateway(LLMGatewayContract):
                     elif event_type == "content_block_delta":
                         delta_payload = event_payload.get("delta")
                         if isinstance(delta_payload, dict):
-                            if delta_payload.get("type") == "input_json_delta":
+                            if delta_payload.get("type") in {"thinking_delta", "signature_delta"}:
+                                block = thinking_blocks.setdefault(
+                                    int(event_payload.get("index", 0)), {"type": "thinking", "thinking": ""},
+                                )
+                                field = "thinking" if delta_payload["type"] == "thinking_delta" else "signature"
+                                block[field] = str(block.get(field, "")) + str(delta_payload.get(field) or "")
+                            elif delta_payload.get("type") == "input_json_delta":
                                 index = _stream_tool_index(
                                     event_payload.get("index"),
                                     streamed_tool_calls,
@@ -830,6 +876,7 @@ class RightCodeLLMGateway(LLMGatewayContract):
                             provider_request_id=provider_request_id,
                             call_id=call_id,
                             tool_calls=tool_calls,
+                            thinking_blocks=tuple(thinking_blocks[index] for index in sorted(thinking_blocks)),
                         )
                         await self._record_success(
                             call_id,
@@ -1273,8 +1320,8 @@ def _anthropic_payload(
             )
             continue
         flush_tool_results()
-        if item.role == "assistant" and item.tool_calls:
-            content: list[dict[str, Any]] = []
+        if item.role == "assistant" and (item.tool_calls or item.thinking_blocks):
+            content: list[dict[str, Any]] = [*item.thinking_blocks]
             if item.content:
                 content.append({"type": "text", "text": item.content})
             for tool_call in item.tool_calls:
@@ -1300,11 +1347,8 @@ def _anthropic_payload(
         "max_tokens": request.max_output_tokens or 4096,
         "stream": stream,
     }
-    if _should_disable_deepseek_thinking(profile, request):
-        # DeepSeek 的 Anthropic 兼容接口默认可能启用思考模式。该模式与
-        # 强制工具选择（any/tool）不兼容；结构化输出必须优先保证原生
-        # Tool 契约可执行。RAG 裁判则继续关闭思考以避免 JSON 截断。
-        payload["thinking"] = {"type": "disabled"}
+    if profile.id.startswith("deepseek-"):
+        payload["thinking"] = {"type": "enabled"}
     if system_parts:
         payload["system"] = "\n\n".join(system_parts)
     if request.tools:
@@ -1320,19 +1364,6 @@ def _anthropic_payload(
     if request.temperature is not None and _supports_temperature(profile):
         payload["temperature"] = request.temperature
     return payload
-
-
-def _should_disable_deepseek_thinking(
-    profile: LLMModelProfile,
-    request: LLMRequest,
-) -> bool:
-    if not profile.id.startswith("deepseek-"):
-        return False
-    if request.task_type == "rag_evaluation_judge":
-        return True
-    if not request.tools:
-        return False
-    return _anthropic_tool_choice(request.tool_choice)["type"] in {"any", "tool"}
 
 
 def _supports_temperature(profile: LLMModelProfile) -> bool:
@@ -1534,6 +1565,10 @@ def _parse_anthropic_response(
         provider_request_id=_optional_text(payload.get("id")),
         call_id=call_id,
         tool_calls=tuple(tool_calls),
+        thinking_blocks=tuple(
+            dict(block) for block in content
+            if isinstance(block, dict) and block.get("type") in {"thinking", "redacted_thinking"}
+        ) if isinstance(content, list) else (),
     )
 
 
@@ -1657,6 +1692,9 @@ async def _iter_sse(
                             "LLM_STREAM_INVALID", "模型流式响应格式不正确。"
                         ) from exc
                     if isinstance(payload, dict):
+                        observation = response.extensions.get(ATTEMPT_EXTENSION)
+                        if isinstance(observation, StreamAttemptObservation):
+                            await observation.received(event_name, payload)
                         yield event_name, payload
             event_name = ""
             data_lines = []
@@ -1670,6 +1708,9 @@ async def _iter_sse(
         if raw != "[DONE]":
             payload = json.loads(raw)
             if isinstance(payload, dict):
+                observation = response.extensions.get(ATTEMPT_EXTENSION)
+                if isinstance(observation, StreamAttemptObservation):
+                    await observation.received(event_name, payload)
                 yield event_name, payload
 
 

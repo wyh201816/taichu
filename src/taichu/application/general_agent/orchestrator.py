@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from taichu.application.trajectory.observer import active_observation
+
 import json
 import re
 from typing import Any, cast, TypeVar
@@ -49,7 +51,7 @@ from taichu.application.invocations.models import (
 from taichu.application.invocations.middleware import (
     ModelInvocationTraceMiddleware,
     ModelRequestSettingsMiddleware,
-    NamedToolChoiceMiddleware,
+    AutomaticToolChoiceMiddleware,
 )
 from taichu.application.services.model_role_router import ModelRoleRouter
 from taichu.application.subagents.registry import SubagentRegistry
@@ -510,10 +512,17 @@ class OrchestratorAgent:
         history_summary_prompt = _json_message(
             {"历史对话摘要": context.history_memory.summary}
         )
+        actual_output_tool = output_tool or _structured_output_tool(output_schema)
+        output_tool_name = str(actual_output_tool["function"]["name"])
         working_prompt = _json_message(
             {
                 "工作记忆": context.working_memory.model_dump(mode="json"),
                 "阶段行为与准则": phase_prompt,
+                "结果提交方式": (
+                    f"完成本阶段后，请主动调用 {output_tool_name} 原生结果提交接口。"
+                    "按照接口定义填写结果，不用普通文字或消息正文中的 JSON 代替提交。"
+                    "业务能力通过执行计划安排，不在结果提交阶段执行。"
+                ),
                 "阶段契约": phase_contract,
                 "本阶段运行参数": working_payload,
                 "当前请求附加上下文": {
@@ -522,8 +531,6 @@ class OrchestratorAgent:
                 },
             }
         )
-        actual_output_tool = output_tool or _structured_output_tool(output_schema)
-        output_tool_name = str(actual_output_tool["function"]["name"])
         parser = PydanticToolsParser(tools=[output_schema], first_tool_only=True)
         task_name = f"general_writing_orchestrator.{phase}"
         trace_invocation = InvocationContext(
@@ -538,7 +545,7 @@ class OrchestratorAgent:
             tools=[*native_tools, actual_output_tool],
             system_prompt=SystemMessage(content=system_memory),
             middleware=[
-                NamedToolChoiceMiddleware(output_tool_name),
+                AutomaticToolChoiceMiddleware(),
                 ModelRequestSettingsMiddleware(
                     model_id=model_id,
                     task_type="general_agent_orchestration",
@@ -659,6 +666,15 @@ class OrchestratorAgent:
                 output = await parser.ainvoke(response)
                 if not isinstance(output, output_schema):
                     raise OrchestratorOutputError("模型没有调用指定的结构化输出 Tool。")
+                observation = active_observation.get()
+                model_call_id = response.response_metadata.get("trajectory_call_id")
+                if observation is not None and model_call_id and isinstance(output, GeneralAgentPlanDraft):
+                    for node in output.nodes:
+                        observation.plan_origins[(run.plan_revision + 1, node.node_id)] = str(model_call_id)
+                    await observation.emit("model_association", {
+                        "plan_revision": run.plan_revision + 1,
+                        "planned_capabilities": [node.node_id for node in output.nodes],
+                    }, call_id=str(model_call_id))
                 return output
             except ContextCapacityError:
                 raise

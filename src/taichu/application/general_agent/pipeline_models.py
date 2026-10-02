@@ -115,4 +115,4 @@ class ContextPipelinePolicy(PipelineModel):
     fold_fraction: float = 0.8
     full_fraction: float = 0.9
     target_fraction: float = 0.7
-    extractor_model_id: str = "deepseek-v4-flash"
+    extractor_model_id: str = "deepseek-flash"

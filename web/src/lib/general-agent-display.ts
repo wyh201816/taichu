@@ -67,6 +67,8 @@ const capabilityLabels: Record<string, string> = {
   narrative_reviewer: "叙事审查",
   style_reviewer: "文风审查",
   "general_writing_orchestrator.plan": "高层任务规划",
+  "general_writing_orchestrator.replan": "重新规划任务",
+  "context.extract": "提取运行上下文",
   "general_writing_orchestrator.verify": "执行结果校验",
 };
 
@@ -132,6 +134,7 @@ export function generalAgentContinuationRequestIndex(
 }
 
 export function generalCapabilityLabel(name: string): string {
+  if (name === "general_writing_orchestrator.plan.materialize" || name === "general_writing_orchestrator.replan.materialize") return "补齐能力调用参数";
   return knownGeneralCapabilityLabel(name) ?? "未识别能力";
 }
 

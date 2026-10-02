@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import {
   generalSubagentResultViewKind,
   type SubagentResultViewKind,
-} from "@/lib/general-agent-memory-trace";
+} from "@/lib/general-agent-readable-content";
 
 export function GeneralAgentSubagentResult({
   capabilityName,

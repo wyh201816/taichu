@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 import httpx
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import SecretStr
 
 from taichu.application.contracts.llm import (
@@ -34,9 +35,125 @@ from taichu.infrastructure.llm.rightcode import (
 )
 from taichu.infrastructure.llm_usage import JsonlLLMUsageRepository
 from taichu.infrastructure.llm_replays import JsonLLMCallReplayRepository
+from taichu.infrastructure.llm.adapter import GatewayChatModel
+from taichu.application.trajectory.observer import (
+    ObservationScope, TrajectoryRecorder, active_observation,
+)
+from taichu.infrastructure.trajectory.zstd_repository import ZstdTrajectoryRepository
 
 
 class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
+    async def test_trajectory_retains_partial_stream_when_transport_fails(self) -> None:
+        class BrokenStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield 'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"半途输出\\n"}\n\n'.encode()
+                raise httpx.ReadError("合成流中断")
+
+        gateway, client, _ = self._gateway(httpx.MockTransport(lambda _: httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, stream=BrokenStream())), max_retries=0)
+        recorder = TrajectoryRecorder(ZstdTrajectoryRepository(self.assets_root / "trajectory"))
+        token = active_observation.set(ObservationScope(recorder, "partial", "partial-run", 1))
+        fragments = []
+        try:
+            with self.assertRaises(Exception):
+                async for chunk in GatewayChatModel(gateway, model_id="gpt-5-6-luna").astream([HumanMessage("合成中断请求")]):
+                    fragments.append(str(chunk.content))
+        finally:
+            active_observation.reset(token)
+            await client.aclose()
+        trace = await recorder.read("partial")
+        self.assertEqual("".join(fragments), "半途输出\n")
+        self.assertEqual(len([event for event in trace.events if event.kind == "model_started"]), 1)
+        self.assertEqual(len([event for event in trace.events if event.kind == "model_failed"]), 1)
+        self.assertFalse(any(event.kind == "model_completed" for event in trace.events))
+        self.assertTrue(any(event.kind == "wire_stream_chunk" for event in trace.events))
+
+    async def test_trajectory_retains_failed_retry_without_duplicate_usage_or_credentials(self) -> None:
+        seen = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if len(seen) == 1:
+                return httpx.Response(429, json={"error": {"message": "合成限流"}})
+            return httpx.Response(200, json={"id": "synthetic-retry",
+                "output_text": "合成回答 test-rightcode-key",
+                "usage": {"input_tokens": 8, "output_tokens": 3}})
+
+        gateway, client, _ = self._gateway(httpx.MockTransport(handler), max_retries=1)
+        recorder = TrajectoryRecorder(ZstdTrajectoryRepository(self.assets_root / "trajectory"))
+        token = active_observation.set(ObservationScope(recorder, "synthetic-conversation", "synthetic-run", 1))
+        try:
+            answer = await GatewayChatModel(gateway, model_id="gpt-5-6-luna").ainvoke([HumanMessage("合成重试请求")])
+        finally:
+            active_observation.reset(token)
+            await client.aclose()
+        self.assertIn("test-rightcode-key", str(answer.content))
+        trace = await recorder.read("synthetic-conversation")
+        self.assertEqual(len([event for event in trace.events if event.kind == "model_started"]), 1)
+        completions = [event for event in trace.events if event.kind == "model_completed"]
+        self.assertEqual(len(completions), 1)
+        self.assertEqual(completions[0].data["response"]["usage"]["output_tokens"], 3)
+        attempts = [event for event in trace.events if event.kind == "attempt_started"]
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(len({event.call_id for event in attempts}), 1)
+        received = [event for event in trace.events if event.kind == "attempt_received"]
+        self.assertEqual([event.data["status_code"] for event in received], [429, 200])
+        self.assertNotIn("test-rightcode-key", trace.model_dump_json())
+
+    async def test_trajectory_preserves_actual_stream_fragments_and_arrival_times(self) -> None:
+        sse = "\n".join([
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"合成"}', '',
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"回答"}', '',
+            'event: response.completed',
+            'data: {"type":"response.completed","response":{"id":"synthetic-stream","output_text":"合成回答","output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"合成推理摘要"}]}],"usage":{"input_tokens":3,"output_tokens":2}}}', '',
+        ])
+        gateway, client, _ = self._gateway(httpx.MockTransport(
+            lambda _: httpx.Response(200, headers={"content-type": "text/event-stream"}, text=sse)
+        ))
+        recorder = TrajectoryRecorder(ZstdTrajectoryRepository(self.assets_root / "trajectory"))
+        token = active_observation.set(ObservationScope(recorder, "synthetic-conversation", "synthetic-run", 1))
+        try:
+            chunks = [chunk async for chunk in GatewayChatModel(gateway, model_id="gpt-5-6-luna").astream([HumanMessage("合成流式请求")])]
+        finally:
+            active_observation.reset(token)
+            await client.aclose()
+        self.assertEqual("".join(str(chunk.content) for chunk in chunks), "合成回答")
+        trace = await recorder.read("synthetic-conversation")
+        deltas = [event for event in trace.events if event.kind == "stream_chunk" and event.data["event"]["event_type"] == "text_delta"]
+        self.assertEqual([event.data["event"]["delta"] for event in deltas], ["合成", "回答"])
+        self.assertTrue(all(event.recorded_at for event in deltas))
+        wire = [event for event in trace.events if event.kind == "wire_stream_chunk"]
+        self.assertIn("合成推理摘要", json.dumps([event.data for event in wire], ensure_ascii=False))
+        self.assertEqual(len([event for event in trace.events if event.kind == "model_completed"]), 1)
+
+    async def test_trajectory_contains_actual_http_business_request_without_authentication(self) -> None:
+        received = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            received.append(json.loads(request.content))
+            return httpx.Response(200, json={
+                "id": "synthetic-request", "output_text": "合成回答",
+                "usage": {"input_tokens": 8, "output_tokens": 3},
+            })
+
+        gateway, client, _ = self._gateway(httpx.MockTransport(handler))
+        recorder = TrajectoryRecorder(ZstdTrajectoryRepository(self.assets_root / "trajectory"))
+        token = active_observation.set(ObservationScope(recorder, "synthetic-conversation", "synthetic-run", 1))
+        try:
+            model = GatewayChatModel(gateway, model_id="gpt-5-6-luna")
+            await model.ainvoke([SystemMessage("稳定约束"), HumanMessage("合成请求")])
+        finally:
+            active_observation.reset(token)
+            await client.aclose()
+        trace = await recorder.read("synthetic-conversation")
+        attempts = [event for event in trace.events if event.kind == "attempt_started"]
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(attempts[0].data["wire_request"], received[0])
+        self.assertNotIn("Authorization", attempts[0].model_dump_json())
+        self.assertNotIn("x-api-key", attempts[0].model_dump_json())
+
     async def asyncSetUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.assets_root = Path(self.temporary_directory.name)
@@ -103,7 +220,7 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len({item.id for item in profiles}), 10)
         self.assertEqual(
             [item.id for item in profiles if item.is_default],
-            ["deepseek-v4-pro"],
+            ["deepseek-flash"],
         )
         self.assertEqual(
             catalog.resolve("deepseek-v4-pro").upstream_model,
@@ -123,38 +240,40 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
             catalog.resolve("deepseek-v4-pro").base_url_key,
             "RIGHTCODE_DEEPSEEK_ANTHROPIC_BASE_URL",
         )
-        self.assertTrue(all(item.upstream_verified for item in profiles))
+        self.assertFalse(catalog.resolve("deepseek-flash").upstream_verified)
+        self.assertTrue(all(item.upstream_verified for item in profiles if item.id != "deepseek-flash"))
 
-    def test_deepseek_official_catalog_defaults_to_v4_flash(self) -> None:
+    def test_deepseek_official_catalog_defaults_to_v41_flash(self) -> None:
         catalog = LLMModelCatalog(_settings(self.assets_root))
         profiles = catalog.list_models("deepseek_official")
 
         self.assertEqual(
             [item.id for item in profiles],
-            ["deepseek-v4-flash", "deepseek-v4-pro"],
+            ["deepseek-flash", "deepseek-v4-pro"],
         )
         self.assertEqual(
             [item.id for item in profiles if item.is_default],
-            ["deepseek-v4-flash"],
+            ["deepseek-flash"],
         )
         self.assertEqual(
             [item.display_name for item in profiles],
-            ["DeepSeek V4 Flash", "DeepSeek V4 Pro"],
+            ["DeepSeek V4.1 Flash", "DeepSeek V4 Pro"],
         )
         self.assertEqual(
             catalog.default_model_id_for("deepseek_official"),
-            "deepseek-v4-flash",
+            "deepseek-flash",
         )
         flash, pro = profiles
-        self.assertEqual(flash.input_price_per_million, Decimal("3.0"))
-        self.assertEqual(flash.cached_input_price_per_million, Decimal("0.10"))
-        self.assertEqual(flash.output_price_per_million, Decimal("9.0"))
-        self.assertEqual(flash.reasoning_output_price_per_million, Decimal("9.0"))
+        self.assertEqual(flash.input_price_per_million, Decimal("0.3"))
+        self.assertEqual(flash.cached_input_price_per_million, Decimal("0.006"))
+        self.assertEqual(flash.output_price_per_million, Decimal("1.2"))
+        self.assertEqual(flash.currency, "USD")
+        self.assertEqual(flash.reasoning_output_price_per_million, Decimal("1.2"))
         self.assertEqual(pro.input_price_per_million, Decimal("9.0"))
         self.assertEqual(pro.cached_input_price_per_million, Decimal("0.30"))
         self.assertEqual(pro.output_price_per_million, Decimal("27.0"))
         self.assertEqual(pro.reasoning_output_price_per_million, Decimal("27.0"))
-        self.assertTrue(all(item.currency == "CNY" for item in profiles))
+        self.assertEqual(pro.currency, "CNY")
 
     def test_unknown_model_is_rejected_with_stable_chinese_error(self) -> None:
         catalog = LLMModelCatalog(_settings(self.assets_root))
@@ -273,7 +392,7 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
         )
         gateway.set_active_provider("deepseek_official")
         try:
-            response = await gateway.complete(_request("deepseek-v4-flash"))
+            response = await gateway.complete(_request("deepseek-flash"))
         finally:
             await client.aclose()
 
@@ -657,7 +776,7 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured_path, "/deepseek/anthropic/v1/messages")
         self.assertEqual(response.text, "可用")
 
-    async def test_deepseek_forced_tool_choice_disables_thinking(self) -> None:
+    async def test_deepseek_structured_auto_choice_enables_thinking(self) -> None:
         captured_payload: dict[str, object] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -690,20 +809,20 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
                 replace(
                     _request("deepseek-v4-pro"),
                     tools=(definition,),
-                    tool_choice="GeneralAgentPlanDraft",
+                    tool_choice="auto",
                 )
             )
         finally:
             await client.aclose()
 
-        self.assertEqual(captured_payload["thinking"], {"type": "disabled"})
+        self.assertEqual(captured_payload["thinking"], {"type": "enabled"})
         self.assertEqual(
             captured_payload["tool_choice"],
-            {"type": "tool", "name": "GeneralAgentPlanDraft"},
+            {"type": "auto"},
         )
         self.assertEqual(response.tool_calls[0].name, "GeneralAgentPlanDraft")
 
-    async def test_deepseek_auto_tool_choice_keeps_default_thinking(self) -> None:
+    async def test_deepseek_auto_tool_choice_explicitly_enables_thinking(self) -> None:
         captured_payload: dict[str, object] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -734,10 +853,10 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.aclose()
 
-        self.assertNotIn("thinking", captured_payload)
+        self.assertEqual(captured_payload["thinking"], {"type": "enabled"})
         self.assertEqual(captured_payload["tool_choice"], {"type": "auto"})
 
-    async def test_official_deepseek_rag_judge_disables_thinking(self) -> None:
+    async def test_official_deepseek_rag_judge_uses_enabled_thinking(self) -> None:
         captured_payload: dict[str, object] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -760,7 +879,7 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
         try:
             await gateway.complete(
                 LLMRequest(
-                    model_id="deepseek-v4-flash",
+                    model_id="deepseek-flash",
                     messages=(LLMMessage(role="user", content="评测"),),
                     task_type="rag_evaluation_judge",
                     task_name="RAG 语义质量评测",
@@ -770,8 +889,56 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.aclose()
 
-        self.assertEqual(captured_payload["thinking"], {"type": "disabled"})
+        self.assertEqual(captured_payload["thinking"], {"type": "enabled"})
         self.assertEqual(captured_payload["max_tokens"], 100_000)
+
+    async def test_thinking_and_signature_survive_messages_stream_and_tool_continuation(self) -> None:
+        thinking = {"type": "thinking", "thinking": "测试推理", "signature": "测试签名"}
+        for stream in (False, True):
+            payloads = []
+
+            def handler(request):
+                payloads.append(json.loads(request.content))
+                if not json.loads(request.content)["stream"]:
+                    return httpx.Response(200, json={
+                        "content": [thinking, {"type": "tool_use", "id": "calc", "name": "calculate", "input": {}}],
+                        "stop_reason": "tool_use", "usage": {"input_tokens": 5, "output_tokens": 8},
+                    })
+                events = [
+                    ("message_start", {"message": {"id": "msg", "usage": {"input_tokens": 5}}}),
+                    ("content_block_start", {"index": 0, "content_block": {"type": "thinking", "thinking": ""}}),
+                    ("content_block_delta", {"index": 0, "delta": {"type": "thinking_delta", "thinking": "测试推理"}}),
+                    ("content_block_delta", {"index": 0, "delta": {"type": "signature_delta", "signature": "测试签名"}}),
+                    ("content_block_start", {"index": 1, "content_block": {"type": "tool_use", "id": "calc", "name": "calculate", "input": {}}}),
+                    ("content_block_delta", {"index": 1, "delta": {"type": "input_json_delta", "partial_json": "{}"}}),
+                    ("message_delta", {"delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 8}}),
+                    ("message_stop", {}),
+                ]
+                body = "".join(f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n" for name, data in events)
+                return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body.encode())
+
+            gateway, client, _ = self._gateway(httpx.MockTransport(handler))
+            model = GatewayChatModel(gateway, model_id="deepseek-flash")
+            try:
+                messages = [HumanMessage(content="计算。")]
+                if stream:
+                    chunks = [chunk async for chunk in model.astream(messages)]
+                    answer = chunks[0]
+                    for chunk in chunks[1:]:
+                        answer += chunk
+                else:
+                    answer = await model.ainvoke(messages)
+                self.assertIn(thinking, answer.content)
+                self.assertEqual(answer.text, "")
+                from langchain_core.messages import ToolMessage
+                await model.ainvoke([*messages, answer, ToolMessage(content="391", tool_call_id="calc")])
+                blocks = payloads[-1]["messages"][1]["content"]
+                self.assertEqual(blocks[0], thinking)
+                self.assertEqual(blocks[1]["type"], "tool_use")
+                self.assertEqual(blocks[1]["id"], "calc")
+                self.assertEqual(payloads[-1]["thinking"], {"type": "enabled"})
+            finally:
+                await client.aclose()
 
     async def test_thinking_only_max_tokens_is_reported_as_truncated(self) -> None:
         def handler(_: httpx.Request) -> httpx.Response:
@@ -908,7 +1075,7 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(requests[1].headers["x-api-key"], "test-deepseek-key")
         payload = json.loads(requests[1].content)
-        self.assertEqual(payload["model"], "deepseek-v4-pro")
+        self.assertEqual(payload["model"], "deepseek-flash")
         records = await repository.list_calls(LLMUsageQuery())
         self.assertEqual(records.total, 1)
         self.assertEqual(records.items[0].provider, "deepseek_official")
@@ -962,7 +1129,7 @@ class RightCodeGatewayTest(unittest.IsolatedAsyncioTestCase):
         gateway.set_active_provider("deepseek_official")
         try:
             with self.assertRaises(LLMGatewayError) as context:
-                await gateway.complete(_request("deepseek-v4-flash"))
+                await gateway.complete(_request("deepseek-flash"))
         finally:
             await client.aclose()
 

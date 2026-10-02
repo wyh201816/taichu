@@ -1,147 +1,72 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
-import { ArrowUpLeft, FileSearch } from "lucide-react";
-
+import { X } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  trajectoryDuration, trajectoryKindLabels, trajectoryStatusLabels,
-  trajectoryCapabilityLabel, type TrajectoryItem,
-} from "@/lib/general-agent-trajectory";
-import type { GeneralAgentContextSnapshot, GeneralAgentLLMReplay } from "@/lib/types/general-agent";
-import type { LedgerRow } from "@/lib/general-agent-trajectory-ledger";
+import { object, raw, rowPurpose, rowStatus, rowSubagentLabel, type TrajectoryRow } from "@/lib/trajectory-records";
+import { trajectoryContentBlocks } from "@/lib/trajectory-content";
+import { GeneralAgentTrajectoryRole } from "./general-agent-trajectory-role";
+import { GeneralAgentTrajectoryContent } from "./general-agent-trajectory-content";
 
-export function GeneralAgentTrajectoryInspector({ item, parent, childrenItems, onSelect }: {
-  item?: TrajectoryItem & Partial<Pick<LedgerRow, "nativeCall">>;
-  parent?: TrajectoryItem;
-  childrenItems: TrajectoryItem[];
-  onSelect: (id: string) => void;
-}) {
-  if (!item) return <aside className="flex items-center justify-center rounded-xl bg-[var(--tc-surface-muted)] p-6 text-sm text-[var(--tc-text-muted)]">
-    <span className="flex items-center gap-2"><FileSearch className="size-4" />选择事件查看证据</span>
+function displayTime(value?: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3, hourCycle: "h23" }).format(date);
+}
+
+export function GeneralAgentTrajectoryInspector({ row, showModelRequest = false, onClose, onSource }: { row: TrajectoryRow; showModelRequest?: boolean; onClose: () => void; onSource: (id: string) => void }) {
+  const [tab, setTab] = useState("概述");
+  const [showRequest, setShowRequest] = useState(showModelRequest);
+  const tabs = row.type === "user" ? ["概述", "预览", "原始内容", "来源"]
+    : row.type === "tool" ? ["概述", "参数", "结果", "接口约束", "计时"] : ["概述", "预览", "原始内容"];
+  const response = object(row.end?.data.response);
+  const usage = object(response.usage);
+  const request = object(row.start.data.request);
+  const blocks = trajectoryContentBlocks(row);
+  const openToolCall = (callId: string) => {
+    const target = row.tool_records?.find(tool => tool.native_call_id === callId);
+    if (target) onSource(target.id);
+    else setTab("原始内容");
+  };
+  const attempts = row.attempts?.filter(event => event.kind === "attempt_started") ?? [];
+  const firstDelta = row.fragments?.find(event => event.kind === "stream_chunk" && object(event.data.event).event_type === "text_delta");
+  const value = (label: string, data: unknown) => <div className="grid grid-cols-[104px_1fr] gap-3 py-1"><span className="text-[var(--tc-text-muted)]">{label}</span><span className="min-w-0 break-words">{data === null || data === undefined ? "不可用" : String(data)}</span></div>;
+  return <aside aria-label="轨迹详情" className="tc-trajectory-inspector flex w-[38%] min-w-[440px] max-w-[800px] shrink-0 flex-col bg-[var(--tc-surface-card)]">
+    <div className="flex h-12 shrink-0 items-center gap-3 px-4 text-sm">
+      {showRequest ? <span>模型请求 #{row.requestNumber}</span> : <GeneralAgentTrajectoryRole row={row} />}{row.subagent_name && <span className="text-[var(--tc-trajectory-model)]">{rowSubagentLabel(row)}</span>}<span className="text-[var(--tc-text-muted)]">第 {row.start.request_index} 轮{row.step ? ` · 步骤 ${row.step}` : ""}</span>
+      <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label="关闭轨迹详情" onClick={onClose}><X className="size-4" /></Button>
+    </div>
+    {showRequest ? <div className="min-h-0 overflow-y-auto p-4 text-sm"><Button variant="ghost" size="sm" onClick={() => setShowRequest(false)}>返回助手记录</Button><p className="my-3 text-xs text-[var(--tc-text-muted)]">实际业务输入 · 不包含鉴权信息</p><pre className="whitespace-pre-wrap break-words text-xs leading-6">{raw(request)}</pre>
+      {row.attempts?.filter(event => event.kind === "attempt_started").map(event => <details key={event.event_id} className="mt-3"><summary className="cursor-pointer">实际发送载荷{Number(event.data.redaction_count) > 0 ? " · 已脱敏" : ""}</summary><pre className="whitespace-pre-wrap break-words text-xs leading-6">{raw(event.data.wire_request)}</pre></details>)}
+    </div> : <>
+      <div role="tablist" aria-label="详情分类" className="tc-trajectory-tabs flex shrink-0 gap-3 px-4">{tabs.map(name => <Button role="tab" aria-selected={tab === name} key={name} variant="ghost" size="sm" className="h-10 rounded-none px-1" onClick={() => setTab(name)}>{name}</Button>)}</div>
+      <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto p-4 text-sm leading-6">
+        {[row.start, row.end, ...(row.attempts ?? []), ...(row.fragments ?? [])].some(event => Number(event?.data.redaction_count) > 0) && <p className="mb-3 text-xs text-[var(--tc-text-muted)]">此记录包含已脱敏内容。</p>}
+        {tab === "概述" && <>
+          {row.type === "assistant" && <div className="mb-3"><span className="mr-8 text-[var(--tc-text-muted)]">来源</span><Button variant="link" size="sm" onClick={() => setShowRequest(true)}>模型请求 #{row.requestNumber}</Button></div>}
+          {row.type === "tool" && <div className="mb-3"><span className="mr-8 text-[var(--tc-text-muted)]">层级</span>{row.parent_id ? <Button variant="link" size="sm" onClick={() => onSource(row.parent_id!)}>助手步骤 {row.step}</Button> : "来源未记录"}</div>}
+          {Number(row.start.data.redaction_count) > 0 && <p className="mb-2 text-xs">观测副本含脱敏内容</p>}
+          {value("状态", rowStatus(row))}
+          {row.subagent_name && value("所属子助手", rowSubagentLabel(row))}
+          {row.type === "assistant" && !row.subagent_name && value("调用用途", rowPurpose(row))}
+          {row.type === "tool" && value("工具名称", rowPurpose(row))}
+          {row.type === "tool" && row.end?.data.execution === "not_started" && value("执行边界", "调用在执行前被拒绝")}
+          {row.type === "assistant" && value("尝试次数", attempts.length || null)}
+          {row.type === "assistant" && <>{value("输入用量", usage.input_tokens)}{value("输出用量", usage.output_tokens)}{value("推理用量", usage.reasoning_tokens)}</>}
+          {value("开始时间", displayTime(row.start.recorded_at))}{value("结束时间", displayTime(row.end?.recorded_at))}{value("耗时（毫秒）", row.end?.data.duration_ms)}
+          {row.type === "assistant" && value("首文本片段", displayTime(firstDelta?.recorded_at))}
+          {!!row.attempts?.length && <details className="mt-3"><summary className="cursor-pointer">尝试与错误记录</summary><pre className="whitespace-pre-wrap break-words text-xs">{raw(row.attempts)}</pre></details>}
+          {row.type !== "tool" && <details className="mt-4"><summary className="cursor-pointer">预览</summary><div className="mt-3"><GeneralAgentTrajectoryContent blocks={blocks} onToolCall={openToolCall} /></div></details>}
+        </>}
+        {tab === "预览" && <GeneralAgentTrajectoryContent blocks={blocks} onToolCall={openToolCall} />}
+        {tab === "原始内容" && <><GeneralAgentTrajectoryContent blocks={blocks} original onToolCall={openToolCall} />{!!row.fragments?.length && <details className="mt-4"><summary className="cursor-pointer">流式片段与接收时间</summary><pre className="whitespace-pre-wrap break-words text-xs">{raw(row.fragments)}</pre></details>}</>}
+        {tab === "来源" && <pre className="whitespace-pre-wrap break-words text-xs">{raw(row.start.data.source)}</pre>}
+        {tab === "参数" && <pre className="whitespace-pre-wrap break-words text-xs">{raw(row.start.data.arguments)}</pre>}
+        {tab === "结果" && <>{object(row.end?.data.result).truncated === true && <p className="mb-2 text-xs">工具本身返回了截断内容，轨迹保留其实际返回边界。</p>}<pre className="whitespace-pre-wrap break-words text-xs">{raw(row.end?.data.result ?? row.end?.data.error)}</pre>{Array.isArray(row.end?.data.warnings) && <pre className="mt-3 whitespace-pre-wrap break-words text-xs">{raw(row.end.data.warnings)}</pre>}</>}
+        {tab === "接口约束" && <pre className="whitespace-pre-wrap break-words text-xs">{raw({ 输入约束: row.start.data.schema, 输出约束: row.start.data.output_schema })}</pre>}
+        {tab === "计时" && <>{value("开始时间", displayTime(row.start.recorded_at))}{value("结束时间", displayTime(row.end?.recorded_at))}{value("耗时（毫秒）", row.end?.data.duration_ms)}</>}
+      </div>
+    </>}
   </aside>;
-  return <aside aria-label="轨迹事件详情" className="min-h-0 overflow-y-auto rounded-xl bg-[var(--tc-surface-muted)] p-4 text-sm text-[var(--tc-text-primary)]">
-    <p className="text-xs text-[var(--tc-text-muted)]">{trajectoryKindLabels[item.kind]} / 事件详情</p>
-    <h2 className="mt-2 text-base font-medium">{item.title}</h2>
-    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--tc-text-secondary)]">
-      <span>{trajectoryStatusLabels[item.status]}</span>
-      {item.durationMs !== null && <span>{trajectoryDuration(item.durationMs)}</span>}
-    </div>
-    <p className="mt-2 text-xs leading-5 text-[var(--tc-text-muted)]">来源：{item.source}</p>
-    {item.notice && <p className="mt-3 rounded-lg bg-[var(--tc-surface-page)] p-3 text-xs leading-5 text-[var(--tc-text-secondary)]">{item.notice}</p>}
-    {parent && <Button className="mt-3 max-w-full" variant="ghost" size="sm" onClick={() => onSelect(parent.id)}>
-      <ArrowUpLeft className="size-3.5" /><span className="truncate">父调用：{parent.title}</span>
-    </Button>}
-    <div className="mt-5 space-y-4">
-      <Section title={item.kind === "user" || item.kind === "answer" ? "原始内容" : "事件摘要"} open>
-        <TextValue value={item.summary || "暂无摘要"} />
-      </Section>
-      {item.replay && <ReplayDetails call={item.replay} />}
-      {item.nativeCall && <>
-        <Section title={item.nativeCall.structured ? "原生输出内容" : "原生工具输入"} open><TextValue value={item.nativeCall.input} /></Section>
-        <Section title={item.nativeCall.structured ? "配对校验反馈" : "配对工具结果"} open><TextValue value={item.nativeCall.output ?? item.nativeCall.resultNotice ?? "未记录配对结果"} /></Section>
-        <Section title="调用时工具定义"><JsonValue value={item.nativeCall.schema ?? "未记录"} /></Section>
-        <Section title="原生调用编号"><TextValue value={item.nativeCall.callId} /></Section>
-      </>}
-      {item.snapshot && <ContextDetails snapshot={item.snapshot} />}
-      {item.node && <>
-        <Section title="节点输入"><JsonValue value={item.node.resolved_input} /></Section>
-        <Section title="节点输出"><JsonValue value={item.node.output} /></Section>
-        <Section title={`来源与产物 · ${item.node.source_refs.length + item.node.artifact_refs.length} 项`}>
-          <JsonValue value={{ 来源引用: item.node.source_refs, 产物引用: item.node.artifact_refs }} />
-        </Section>
-        <Section title="授权与写入证据">
-          <JsonValue value={{ 已经作者批准: item.node.authorization_approved, 已经二次确认: item.node.authorization_second_confirmation,
-            授权资源范围: item.node.authorization_resource_scopes, 授权记录编号: item.node.authorization_grant_id ?? "未记录",
-            写入效果编号: item.node.effect_id ?? "未记录", 对账说明: item.node.reconciliation_reason || "暂无" }} />
-        </Section>
-        {item.node.error_message && <Section title="节点错误"><TextValue value={item.node.error_message} /></Section>}
-      </>}
-      {item.trace && <>
-        <Section title="调用统计与重试">
-          <JsonValue value={{ 输入字符: item.trace.input_char_count, 输出字符: item.trace.output_char_count,
-            输入词元: item.trace.input_tokens ?? "未记录", 输出词元: item.trace.output_tokens ?? "未记录",
-            重试次数: item.trace.retry_count, 来源数量: item.trace.source_count }} />
-        </Section>
-        {!item.node && item.kind !== "model" && <p className="text-xs leading-5 text-[var(--tc-text-muted)]">此调用只保存了追踪摘要，未关联独立输入、输出正文。</p>}
-        {item.trace.error_message && <Section title="调用错误"><TextValue value={item.trace.error_message} /></Section>}
-      </>}
-      {childrenItems.length > 0 && <Section title={`子调用 · ${childrenItems.length} 项`} open>
-        <div className="space-y-1">{childrenItems.map(child => <button key={child.id} type="button"
-          onClick={() => onSelect(child.id)} className="w-full rounded-lg p-2 text-left text-xs hover:bg-[var(--tc-surface-page)] focus-visible:outline-2 focus-visible:outline-white">
-          <span className="block">{child.title}</span><span className="text-[var(--tc-text-muted)]">{trajectoryStatusLabels[child.status]} · {trajectoryDuration(child.durationMs)}</span>
-        </button>)}</div>
-      </Section>}
-      <Section title="原始标识与时间">
-        <JsonValue value={{ 事件标识: item.id, 开始时间: item.startedAt || "未记录", 结束时间: item.finishedAt ?? "未记录",
-          调用编号: item.trace?.call_id ?? item.replay?.call_id ?? "未记录", 父调用编号: item.trace?.parent_call_id ?? "无",
-          快照编号: item.snapshot?.snapshot_id ?? "未记录", 节点编号: item.node?.node_id ?? "未记录",
-          计划修订号: item.node?.plan_revision ?? "未记录", 状态是否推断: item.inferred ? "是" : "否" }} />
-      </Section>
-    </div>
-  </aside>;
-}
-
-function ReplayDetails({ call }: { call: GeneralAgentLLMReplay }) {
-  const system = call.messages.filter(message => message.role === "system");
-  const roles = { system: "系统", developer: "应用约束", user: "用户", assistant: "助手", tool: "工具结果" };
-  return <>
-    <Section title="当时的系统提示词">
-      {system.length ? system.map((message, index) => <TextValue key={index} value={message.content} />) : <TextValue value="本次回放未记录系统消息。" />}
-    </Section>
-    <Section title={`当时的原生工具定义 · ${call.tools.length} 项`}>
-      {call.tools.length ? call.tools.map((tool, index) => <Section key={index} title={trajectoryCapabilityLabel(tool.name)}>
-        <p className="mb-2 text-xs">{tool.description}</p><JsonValue value={tool} />
-      </Section>) : <TextValue value="本次请求未携带原生工具定义。" />}
-    </Section>
-    <Section title={`实际请求消息 · ${call.messages.length} 条`}>
-      <p className="mb-3 text-xs text-[var(--tc-text-muted)]">以下按模型接口顺序展示。接口角色不等于记忆层；内部调用不是用户历史。</p>
-      <div className="space-y-3">{call.messages.map((message, index) => <Section key={index} title={`${index + 1}. ${roles[message.role]}`}>
-        <TextValue value={message.content || "无文本内容"} />
-        {!!message.tool_calls.length && <JsonValue value={{ 原生工具请求: message.tool_calls }} />}
-        {message.tool_call_id && <JsonValue value={{ 配对调用编号: message.tool_call_id }} />}
-      </Section>)}</div>
-    </Section>
-    <Section title="模型实际响应">
-      <TextValue value={call.response_text || "未返回文本内容"} />
-      {!!call.response_tool_calls.length && <JsonValue value={{ 原生工具调用: call.response_tool_calls }} />}
-    </Section>
-    <Section title="模型用量与脱敏信息">
-      <JsonValue value={{ 模型标识: call.model_id, 上游模型标识: call.upstream_model,
-        输入词元: call.input_tokens ?? "未记录", 缓存命中词元: call.cached_input_tokens ?? "未记录",
-        输出词元: call.output_tokens ?? "未记录", 推理词元: call.reasoning_tokens ?? "未记录",
-        总词元: call.total_tokens ?? "未记录", 首字延迟: "未采集", 解码耗时: "未采集",
-        脱敏字段数量: call.redaction_count, 请求内容哈希: call.request_sha256, 响应内容哈希: call.response_sha256 }} />
-    </Section>
-    {call.error_message && <Section title="模型错误"><TextValue value={call.error_message} /></Section>}
-  </>;
-}
-
-function ContextDetails({ snapshot }: { snapshot: GeneralAgentContextSnapshot }) {
-  const envelope = snapshot.envelope;
-  return <Section title="五层记忆投影">
-    <div className="space-y-3">
-      <Section title="稳定记忆"><JsonValue value={envelope.stable_memory} /></Section>
-      <Section title="长期记忆"><JsonValue value={envelope.long_term_memory} /></Section>
-      <Section title="历史对话"><JsonValue value={envelope.history_memory} /></Section>
-      <Section title="工作记忆"><JsonValue value={envelope.working_memory} /></Section>
-      <Section title="当前请求"><JsonValue value={envelope.current_request} /></Section>
-      <Section title="压缩与投影统计"><JsonValue value={{ 已压缩: envelope.compressed, 使用回退: envelope.fallback_used,
-        总字符数: envelope.total_char_count, 估算词元: envelope.estimated_token_count, 分类统计: envelope.category_stats }} /></Section>
-    </div>
-  </Section>;
-}
-
-function Section({ title, children, open = false }: { title: string; children: ReactNode; open?: boolean }) {
-  const [expanded, setExpanded] = useState(open);
-  return <details open={expanded} onToggle={event => setExpanded(event.currentTarget.open)} className="group text-sm">
-    <summary className="cursor-pointer rounded py-1 text-[var(--tc-text-secondary)] focus-visible:outline-2 focus-visible:outline-white">{title}</summary>
-    {expanded && <div className="mt-2 min-w-0">{children}</div>}
-  </details>;
-}
-function TextValue({ value }: { value: string }) {
-  return <p className="max-h-[420px] overflow-y-auto whitespace-pre-wrap break-words text-xs leading-6 [overflow-wrap:anywhere]">{value}</p>;
-}
-function JsonValue({ value }: { value: unknown }) {
-  return <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--tc-surface-page)] p-3 font-mono text-xs leading-5 [overflow-wrap:anywhere]">{JSON.stringify(value, null, 2)}</pre>;
 }

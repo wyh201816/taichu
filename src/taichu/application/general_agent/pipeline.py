@@ -49,7 +49,7 @@ from taichu.application.general_agent.pipeline_models import (
 from taichu.application.general_agent.result_preview import json_text, result_preview
 from taichu.application.invocations.models import InvocationContext, now_iso
 from taichu.application.invocations.middleware import (
-    NamedToolChoiceMiddleware,
+    AutomaticToolChoiceMiddleware,
     ModelRequestSettingsMiddleware,
     ModelInvocationTraceMiddleware,
 )
@@ -872,9 +872,14 @@ class ContextPipeline:
         if schema:
             output_tool = convert_to_openai_tool(schema)
             native_tools.append(output_tool)
-            middleware.append(
-                NamedToolChoiceMiddleware(output_tool["function"]["name"])
-            )
+            middleware.append(AutomaticToolChoiceMiddleware())
+            messages = [*messages[:-1], ChatMessage(
+                role="developer",
+                content=(
+                    f"请主动调用 {output_tool['function']['name']} 原生结果提交接口完成本次处理。"
+                    "按照接口定义填写结果，不用普通文字或消息正文中的 JSON 代替提交。"
+                ),
+            ), *messages[-1:]]
         else:
             middleware.append(_NoToolExecution())
         output_tokens = 6_000 if stage == "extract" else 12_000

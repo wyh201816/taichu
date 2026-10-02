@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BrainCircuit, GitBranch, Route, Scale } from "lucide-react";
+import { GitBranch, Scale } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -9,7 +9,7 @@ export function GeneralAgentMonitorNav({
   active,
   accent = false,
 }: {
-  active: "monitor" | "trajectory" | "memory" | "evaluation";
+  active: "monitor" | "evaluation";
   accent?: boolean;
 }) {
   const items = [
@@ -18,18 +18,6 @@ export function GeneralAgentMonitorNav({
       href: "/task-monitor/general-agent",
       label: "节点监控",
       icon: GitBranch,
-    },
-    {
-      key: "trajectory" as const,
-      href: "/task-monitor/general-agent/trajectory",
-      label: "执行轨迹",
-      icon: Route,
-    },
-    {
-      key: "memory" as const,
-      href: "/task-monitor/general-agent/memory-trace",
-      label: "记忆追踪",
-      icon: BrainCircuit,
     },
     {
       key: "evaluation" as const,
@@ -44,7 +32,7 @@ export function GeneralAgentMonitorNav({
       className={cn(
         "flex items-center rounded-[var(--tc-radius-control)] bg-[var(--tc-surface-card)]",
         accent
-          ? "h-12 gap-4 bg-[#0b141c]/92 px-5 ring-1 ring-inset ring-white/[0.035]"
+          ? "h-12 gap-4 px-5"
           : "gap-1 p-1",
       )}
     >
@@ -60,9 +48,7 @@ export function GeneralAgentMonitorNav({
               "relative inline-flex items-center gap-1.5 rounded-[var(--tc-radius-control)] text-sm transition-colors duration-150 motion-reduce:transition-none",
               accent ? "h-full px-2" : "px-3 py-2",
               isActive
-                ? accent
-                  ? "bg-[radial-gradient(ellipse_at_bottom,rgba(103,232,249,0.11),rgba(103,232,249,0.035)_58%,transparent_76%)] text-cyan-200 shadow-[0_8px_24px_rgba(34,211,238,0.055)] after:absolute after:bottom-0 after:left-1/2 after:h-px after:w-12 after:-translate-x-1/2 after:bg-cyan-200 after:shadow-[0_0_9px_rgba(103,232,249,0.68)]"
-                  : "bg-[var(--tc-surface-muted)] text-[var(--tc-text-primary)]"
+                ? "bg-[var(--tc-surface-muted)] text-[var(--tc-text-primary)]"
                 : accent
                   ? "text-[var(--tc-text-muted)] hover:text-[var(--tc-text-primary)]"
                   : "text-[var(--tc-text-muted)] hover:bg-[var(--tc-surface-muted)] hover:text-[var(--tc-text-primary)]",

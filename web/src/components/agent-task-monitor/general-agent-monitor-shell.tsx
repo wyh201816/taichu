@@ -12,7 +12,6 @@ import {
   ListTree,
   PanelRightOpen,
   RefreshCw,
-  Route,
   ShieldCheck,
   Wrench,
   X,
@@ -512,12 +511,6 @@ function RoundToolbar({
         </Popover.Portal>
       </Popover.Root>
       <div className="flex shrink-0 flex-wrap justify-end gap-2">
-        <Link
-          href={`/task-monitor/general-agent/trajectory?conversation=${encodeURIComponent(run.conversation_id)}&run=${encodeURIComponent(run.run_id)}`}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[var(--tc-radius-pill)] px-3 text-sm text-[var(--tc-text-secondary)] hover:bg-[var(--tc-surface-muted)] focus-visible:outline-2 focus-visible:outline-white"
-        >
-          <Route className="size-4" />查看执行轨迹
-        </Link>
         <Button type="button" variant="outline" onClick={onOpenRunDetail}>
           <PanelRightOpen className="size-4" />
           本次请求详情

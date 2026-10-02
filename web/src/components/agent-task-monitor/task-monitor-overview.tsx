@@ -8,7 +8,6 @@ import {
   GitBranch,
   Network,
   RefreshCw,
-  Route,
   Scale,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -155,22 +154,6 @@ export function TaskMonitorOverview() {
                       ? "正在读取任务"
                       : `共 ${generalTasks.length} 个任务，${generalRunningCount > 0 ? `${generalRunningCount} 个运行中` : "当前无运行中任务"}`}
                   </span>
-                </span>
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-[var(--tc-text-muted)]" />
-            </Link>
-
-            <Link
-              href="/task-monitor/general-agent/trajectory"
-              className="flex items-center justify-between gap-3 rounded-[var(--tc-radius-card)] bg-[var(--tc-surface-card)] px-3 py-3 text-sm text-[var(--tc-text-primary)] hover:bg-[var(--tc-surface-muted)] focus-visible:outline-2 focus-visible:outline-white"
-            >
-              <span className="flex min-w-0 items-center gap-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--tc-radius-control)] bg-[var(--tc-surface-muted)] text-[var(--tc-monitor-general-agent)]">
-                  <Route className="size-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-medium">执行轨迹</span>
-                  <span className="mt-0.5 block text-xs text-[var(--tc-text-muted)]">通用写作助手的调用时序、上下文与请求证据</span>
                 </span>
               </span>
               <ChevronRight className="size-4 shrink-0 text-[var(--tc-text-muted)]" />
