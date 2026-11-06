@@ -131,6 +131,10 @@
   </tr>
 </table>
 
+![执行轨迹示例，展示执行时间线、子助手与工具调用，以及初始系统提示词的工具列表](./assets/agent-execution-trajectory.png)
+
+<p align="center">执行轨迹示例 · 按轮次查看模型与工具调用</p>
+
 高层 Orchestrator 将复杂请求规划为动态 DAG，按依赖调度确定性 Tool 与专业 Sub-agent，并通过 Verification / Replan 收敛结果。计划修订、节点状态、Trace、Checkpoint、失败与恢复全过程均可查看；持久化写入前由作者授权。
 
 <details>
